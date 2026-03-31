@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     KRDICT_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
 
+    FFMPEG_BIN: str = r"C:\ffmpeg\bin"  # ffmpeg 설치 경로
+    WHISPER_MODEL: str = "small"         # base | small | medium
+
     class Config:
         env_file = ".env"
 

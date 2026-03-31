@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.api.deps import get_current_user
@@ -6,6 +6,8 @@ from app.models.user import User
 from app.models.word_card import WordCard
 from app.models.scan_record import ScanRecord
 from app.schemas.scan import AudioScanRequest, AudioScanResponse
+from app.services.pipeline import run_pipeline
+from app.core.config import settings
 
 router = APIRouter(prefix="/scan", tags=["scan"])
 
@@ -46,11 +48,20 @@ def process_scan_result(
 @router.post("/upload")
 async def upload_audio(
     file: UploadFile = File(...),
+    scan_source: str = Form("mic"),  # "mic" | "media"
     current_user: User = Depends(get_current_user),
 ):
     """
-    오디오 파일을 받아 임성빈/서정빈 AI 파이프라인으로 전달하는 엔드포인트 (스텁).
-    실제 AI 모듈 연동 시 구현 완성 예정.
+    오디오 파일을 받아 Demucs → Whisper 파이프라인 실행 후 인식 텍스트 반환.
+    이후 LLM 후보정 → KoNLPy 형태소 분석은 추후 추가 예정.
     """
-    # TODO: 파일을 저장하고 Demucs + Whisper 파이프라인 호출
-    return {"status": "received", "filename": file.filename, "message": "AI pipeline integration pending"}
+    if not file.filename.lower().endswith((".wav", ".mp3", ".m4a", ".ogg")):
+        raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다. (wav/mp3/m4a/ogg)")
+
+    audio_bytes = await file.read()
+    whisper_text = run_pipeline(
+        audio_bytes=audio_bytes,
+        ffmpeg_bin=settings.FFMPEG_BIN,
+        whisper_model_size=settings.WHISPER_MODEL,
+    )
+    return {"whisper_text": whisper_text, "scan_source": scan_source}

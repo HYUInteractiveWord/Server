@@ -2,10 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.user import User
+from app.models.mission import Mission
 from app.schemas.user import UserCreate, UserLogin, UserResponse, TokenResponse
 from app.core.security import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+INITIAL_DAILY_MISSIONS = [
+    {"mission_type": "daily_pronunciation", "target": 3, "xp_reward": 150},
+    {"mission_type": "daily_scan", "target": 5, "xp_reward": 150},
+]
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -21,6 +27,11 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hash_password(body.password),
     )
     db.add(user)
+    db.flush()  # user.id 확보
+
+    for m in INITIAL_DAILY_MISSIONS:
+        db.add(Mission(user_id=user.id, **m))
+
     db.commit()
     db.refresh(user)
     return user
