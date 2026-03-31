@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: interactiveword_db
+    environment:
+      POSTGRES_USER: iwuser
+      POSTGRES_PASSWORD: iwpassword
+      POSTGRES_DB: interactiveword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
