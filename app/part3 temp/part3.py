@@ -1,3 +1,5 @@
+# Ollama 설치 후 gemma3:4b 설치 필수
+# pip install requests konlpy langchain-ollama edge-tts
 import os
 import json
 import asyncio
