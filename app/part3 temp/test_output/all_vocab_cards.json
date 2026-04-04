@@ -1,0 +1,29 @@
+[
+    {
+        "word": "해바라기",
+        "pronunciation": "hae-ba-ra-gi",
+        "pos_type": "명사",
+        "semantic_category": "",
+        "definition_korean": "높이는 2미터 정도이고, 늦여름에 피는 노랗고 둥글넓적한 큰 꽃.",
+        "definition_english": "It is a plant that grows up to 2 meters tall and has a large, round, and plump yellow flower that blooms in late summer.",
+        "examples": [
+            {
+                "type": "llm_generated",
+                "korean": "해바라기가 예쁘다.",
+                "english": "The sunflower is pretty."
+            },
+            {
+                "type": "llm_generated",
+                "korean": "해바라기는 해를 향한다.",
+                "english": "The sunflower faces the sun."
+            }
+        ],
+        "audio": {
+            "word_tts": "./test_output\\해바라기\\해바라기_word.mp3",
+            "examples_tts": [
+                "./test_output\\해바라기\\해바라기_ex_1.mp3",
+                "./test_output\\해바라기\\해바라기_ex_2.mp3"
+            ]
+        }
+    }
+]
