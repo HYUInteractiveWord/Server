@@ -76,3 +76,67 @@ app/
 | POST | `/api/scan/process` | STT 결과 수신 및 처리 |
 | POST | `/api/pronunciation/submit` | 발음 분석 결과 수신 |
 | GET | `/api/missions/daily` | 오늘의 미션 |
+
+## 프론트 폴더 확인 이후 추가 구현 / 수정 사항 (2026.04.10)
+
+### 1. 사용자 정보 조회 API 추가
+프론트엔드의 Home / Profile 화면에서 로그인된 사용자 정보를 표시할 수 있도록, 현재 로그인한 사용자 정보를 조회하는 API를 추가했습니다.
+
+- **Method**: `GET`
+- **URL**: `/api/auth/me`
+
+#### 응답 예시
+
+```json
+{
+  "id": 1,
+  "username": "testuser1",
+  "email": "test1@example.com",
+  "xp": 0,
+  "rank": "Bronze",
+  "max_word_slots": 20,
+  "created_at": "2026-04-10T00:00:00"
+}
+```
+
+---
+
+### 2. 사전 검색 전용 API 추가
+검색 결과를 먼저 보여준 뒤, 사용자가 저장 여부를 선택할 수 있도록 사전 검색만 수행하는 전용 API를 추가했습니다.
+
+- **Method**: `GET`
+- **URL**: `/api/dictionary/search?word=단어`
+
+#### 응답 예시
+
+```json
+{
+  "word": "사과",
+  "pos": "명사",
+  "definition": "먹는 열매"
+}
+```
+
+---
+
+### 3. TTS 경로 형식 수정
+기존에는 TTS 파일 경로를 상대 경로로 반환했지만, 프론트엔드에서 바로 사용할 수 있도록 절대 URL 형식으로 수정했습니다.
+
+#### 변경 전
+
+```text
+static/tts/파일명.mp3
+```
+
+#### 변경 후
+
+```text
+http://주소/static/tts/파일명.mp3
+```
+
+---
+
+### 4. 로그인 요청 형식 정리
+테스트 과정에서 Swagger OAuth2 Authorize와의 호환을 위해 한때 `OAuth2PasswordRequestForm` 기반의 `form-data` 방식으로 변경하여 확인했습니다.
+
+최종적으로는 프론트엔드 연동 방식에 맞춰 다시 **JSON Body 방식**으로 복구했습니다.

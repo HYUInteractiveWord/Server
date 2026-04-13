@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
 from app.db import Base, engine
-from app.api.routes import auth, words, scan, pronunciation, missions
+from app.api.routes import auth, words, scan, pronunciation, missions, dictionary # whisper 잠시 끔, scan
 
 # DB 테이블 생성 (개발용 - 프로덕션은 Alembic 마이그레이션 사용)
 Base.metadata.create_all(bind=engine)
@@ -33,6 +33,7 @@ app.include_router(words.router, prefix="/api")
 app.include_router(scan.router, prefix="/api")
 app.include_router(pronunciation.router, prefix="/api")
 app.include_router(missions.router, prefix="/api")
+app.include_router(dictionary.router, prefix="/api")
 
 
 @app.get("/health")

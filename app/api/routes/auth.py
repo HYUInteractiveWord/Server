@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db import get_db
+from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.mission import Mission
 from app.schemas.user import UserCreate, UserLogin, UserResponse, TokenResponse
@@ -27,7 +28,7 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hash_password(body.password),
     )
     db.add(user)
-    db.flush()  # user.id 확보
+    db.flush()
 
     for m in INITIAL_DAILY_MISSIONS:
         db.add(Mission(user_id=user.id, **m))
@@ -44,4 +45,12 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+    }
+
+
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
