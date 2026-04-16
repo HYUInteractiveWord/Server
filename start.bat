@@ -14,4 +14,4 @@ if not exist .venv (
 )
 
 echo [3/3] Starting FastAPI server...
-uvicorn app.main:app --reload
+.venv\Scripts\uvicorn app.main:app --reload
