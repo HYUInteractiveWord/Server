@@ -1,0 +1,270 @@
+
+import os
+import numpy as np
+import librosa
+
+
+def load_audio_flexible(path: str, sr: int = 16000):
+    """
+    오디오 파일을 읽고 mono / target sr로 통일해서 반환
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"파일이 없습니다: {path}")
+
+    print(f"[로드 시도] {path}")
+    y, loaded_sr = librosa.load(path, sr=sr, mono=True)
+
+    if y is None or len(y) == 0:
+        raise RuntimeError(f"오디오 로드 실패: {path}")
+
+    print(f"[로드 성공] samples={len(y)}, sr={loaded_sr}")
+    return y, loaded_sr
+
+
+def validate_audio(y, sr: int, name: str = "audio") -> dict:
+    """
+    오디오 길이 / 평균 RMS 검사
+    """
+    duration = librosa.get_duration(y=y, sr=sr)
+    rms = librosa.feature.rms(y=y)[0]
+    mean_rms = float(np.mean(rms)) if len(rms) > 0 else 0.0
+
+    print(f"[{name}] duration={duration:.3f}s, mean_rms={mean_rms:.6f}")
+
+    warnings = []
+    if duration < 0.15:
+        warnings.append(f"{name}: 길이가 너무 짧습니다.")
+    if mean_rms < 0.005:
+        warnings.append(f"{name}: 음량이 너무 작습니다.")
+
+    for w in warnings:
+        print(f"[경고] {w}")
+
+    return {
+        "duration": float(duration),
+        "mean_rms": float(mean_rms),
+        "warnings": warnings,
+    }
+
+
+def trim_silence(y, top_db: int = 25):
+    """
+    앞뒤 무음 제거
+    """
+    y_trimmed, idx = librosa.effects.trim(y, top_db=top_db)
+    return y_trimmed, idx
+
+
+def normalize_audio(y):
+    """
+    peak normalize
+    """
+    peak = np.max(np.abs(y))
+    if peak > 0:
+        y = y / peak
+    return y
+
+
+def align_by_onset(y, sr: int):
+    """
+    첫 onset 기준으로 시작점 정렬
+    """
+    onset_frames = librosa.onset.onset_detect(
+        y=y,
+        sr=sr,
+        backtrack=True,
+    )
+
+    if len(onset_frames) == 0:
+        return y
+
+    onset_sample = librosa.frames_to_samples(onset_frames[0])
+    return y[onset_sample:]
+
+
+def preprocess_for_pitch(y, sr: int, top_db: int = 25):
+    """
+    pitch 분석용 전처리:
+    - 무음 제거
+    """
+    y_trimmed, trim_idx = trim_silence(y, top_db=top_db)
+    return {
+        "y": y_trimmed,
+        "trim_idx": trim_idx,
+        "sr": sr,
+    }
+
+
+def preprocess_for_pronunciation(y, sr: int, top_db: int = 25):
+    """
+    pronunciation 분석용 전처리:
+    - 무음 제거
+    - onset 정렬
+    - 볼륨 정규화
+    """
+    y_trimmed, trim_idx = trim_silence(y, top_db=top_db)
+    y_aligned = align_by_onset(y_trimmed, sr)
+    y_norm = normalize_audio(y_aligned)
+
+    return {
+        "y": y_norm,
+        "trim_idx": trim_idx,
+        "sr": sr,
+    }
+
+
+def safe_mean(arr):
+    arr = np.asarray(arr, dtype=float)
+    arr = arr[~np.isnan(arr)]
+    if len(arr) == 0:
+        return 0.0
+    return float(np.mean(arr))
+
+
+def resample_array(arr, target_len: int = 200):
+    """
+    길이가 다른 배열을 target_len으로 보간
+    """
+    arr = np.asarray(arr, dtype=float)
+
+    if len(arr) == 0:
+        return np.zeros(target_len)
+
+    x = np.arange(len(arr))
+    valid = ~np.isnan(arr)
+
+    if np.sum(valid) < 2:
+        fill_value = np.nanmean(arr) if np.sum(valid) > 0 else 0.0
+        return np.full(target_len, fill_value, dtype=float)
+
+    arr_interp = np.interp(x, x[valid], arr[valid])
+    x_new = np.linspace(0, len(arr_interp) - 1, target_len)
+    arr_resampled = np.interp(x_new, x, arr_interp)
+
+    return arr_resampled
+
+
+def extract_mfcc(y, sr: int, n_mfcc: int = 13):
+    """
+    MFCC 추출 + 전역 정규화
+    """
+    mfcc = librosa.feature.mfcc(
+        y=y,
+        sr=sr,
+        n_mfcc=n_mfcc,
+    )
+
+    mfcc = (mfcc - np.mean(mfcc)) / (np.std(mfcc) + 1e-6)
+    return mfcc
+
+
+def extract_pitch(y, sr: int, fmin: str = "C2", fmax: str = "G5"):
+    """
+    pyin 기반 F0 추출
+    무성구간은 NaN
+    """
+    f0, voiced_flag, voiced_probs = librosa.pyin(
+        y,
+        fmin=librosa.note_to_hz(fmin),
+        fmax=librosa.note_to_hz(fmax),
+    )
+    times = librosa.times_like(f0, sr=sr)
+    return times, f0
+
+
+def extract_intensity(y):
+    """
+    RMS 기반 intensity
+    """
+    rms = librosa.feature.rms(y=y)[0]
+    times = librosa.times_like(rms)
+    return times, rms
+
+
+def check_voiced_ratio(f0, name: str = "audio") -> float:
+    total = len(f0)
+    voiced = np.sum(~np.isnan(f0))
+    ratio = voiced / total if total > 0 else 0.0
+
+    print(f"[{name} voiced ratio] {voiced}/{total} = {ratio:.2%}")
+    return ratio
+
+
+def pitch_features(f0) -> dict:
+    valid = np.asarray(f0, dtype=float)
+    valid = valid[~np.isnan(valid)]
+
+    if len(valid) == 0:
+        return {
+            "mean_f0": 0.0,
+            "max_f0": 0.0,
+            "min_f0": 0.0,
+            "range_f0": 0.0,
+        }
+
+    mean_f0 = float(np.mean(valid))
+    max_f0 = float(np.max(valid))
+    min_f0 = float(np.min(valid))
+    range_f0 = max_f0 - min_f0
+
+    return {
+        "mean_f0": mean_f0,
+        "max_f0": max_f0,
+        "min_f0": min_f0,
+        "range_f0": float(range_f0),
+    }
+
+
+def align_pitch_by_first_voiced(times, f0):
+    """
+    첫 유성구간 기준 정렬
+    """
+    times = np.asarray(times, dtype=float)
+    f0 = np.asarray(f0, dtype=float)
+
+    voiced_idx = np.where(~np.isnan(f0))[0]
+    if len(voiced_idx) == 0:
+        return times, f0, None
+
+    first_idx = voiced_idx[0]
+    aligned_times = times - times[first_idx]
+    return aligned_times, f0, first_idx
+
+
+def align_contours_by_cross_correlation(f0_ref, f0_usr, target_len: int = 200):
+    """
+    contour 정렬
+    """
+    ref = resample_array(f0_ref, target_len=target_len)
+    usr = resample_array(f0_usr, target_len=target_len)
+
+    def fill_and_norm(x):
+        x = np.asarray(x, dtype=float)
+
+        if np.all(np.isnan(x)):
+            return np.zeros_like(x)
+
+        valid = ~np.isnan(x)
+        idx = np.arange(len(x))
+        x = np.interp(idx, idx[valid], x[valid])
+
+        std = np.std(x)
+        if std < 1e-6:
+            return np.zeros_like(x)
+
+        return (x - np.mean(x)) / std
+
+    ref_n = fill_and_norm(ref)
+    usr_n = fill_and_norm(usr)
+
+    corr = np.correlate(ref_n, usr_n, mode="full")
+    shift = np.argmax(corr) - (len(ref_n) - 1)
+
+    if shift > 0:
+        usr_shifted = np.pad(usr_n, (shift, 0), mode="constant")[:len(usr_n)]
+    elif shift < 0:
+        usr_shifted = np.pad(usr_n, (0, -shift), mode="constant")[-shift: len(usr_n) - shift]
+    else:
+        usr_shifted = usr_n.copy()
+
+    return ref_n, usr_n, usr_shifted, int(shift)
