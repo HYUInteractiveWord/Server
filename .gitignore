@@ -6,3 +6,4 @@ __pycache__/
 venv/
 static/tts/
 alembic/versions/
+models/

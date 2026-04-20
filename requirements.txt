@@ -1,3 +1,11 @@
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+numpy<2.0.0
+
+torch==2.4.0+cu124
+torchvision==0.19.0+cu124
+torchaudio==2.4.0+cu124
+
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.36
@@ -14,3 +22,9 @@ gtts==2.5.3
 openai-whisper==20250625
 demucs==4.0.1
 bcrypt==4.3.0
+requests
+konlpy==0.6.0
+langchain-openai==0.1.14
+edge-tts==7.2.8
+httpx
+soundfile

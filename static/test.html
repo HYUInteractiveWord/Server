@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-Recorder Pipeline Test</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; background-color: #f5f7fa; color: #333; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-bottom: 20px; }
+        .profile { font-size: 0.9em; color: #666; background: #e2e8f0; padding: 5px 10px; border-radius: 15px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        
+        /* 분석 로그 스타일 */
+        .analysis-log { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-size: 0.85em; color: #cbd5e1; }
+        .analysis-log h4 { margin-top: 0; margin-bottom: 12px; color: #94a3b8; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #334155; padding-bottom: 5px; }
+        .log-item { margin-bottom: 10px; line-height: 1.5; }
+        .log-label { font-weight: bold; color: #38bdf8; display: block; margin-bottom: 2px; }
+        .log-value { color: #f1f5f9; white-space: pre-wrap; word-break: break-all; font-family: 'Courier New', Courier, monospace; }
+
+        button { background-color: #4f46e5; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 1em; }
+        button:hover { background-color: #4338ca; }
+        button:disabled { background-color: #a5b4fc; cursor: not-allowed; }
+        
+        .loader { display: none; color: #4f46e5; font-weight: bold; margin-top: 10px; }
+        .word-item { margin-bottom: 10px; padding: 10px; background: #fff; border: 1px solid #cbd5e1; border-radius: 5px; transition: border-color 0.2s; }
+        .word-item:hover { border-color: #4f46e5; }
+        
+        .vocab-card { border-left: 4px solid #4f46e5; background: #fff; padding: 15px; margin-bottom: 15px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);}
+        audio { height: 30px; margin-top: 5px; }
+        hr { border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>K-Recorder Pipeline Prototype</h2>
+        <span class="profile">Welcome, seo</span>
+    </div>
+
+    <div class="card" id="step1">
+        <h3>Step 1. 오디오 분석 (Demucs + Whisper + LLM)</h3>
+        <input type="file" id="audioFile" accept="audio/*">
+        <button id="uploadBtn" onclick="uploadAudio()">분석 시작</button>
+        <div id="loader1" class="loader">AI가 음성을 분리하고 텍스트를 분석 중입니다...</div>
+    </div>
+
+    <div class="card" id="step2" style="display: none;">
+        <h3>Step 2. AI 분석 결과 확인</h3>
+        
+        <div class="analysis-log">
+            <h4>🔍 AI Pipeline Debugging Logs</h4>
+            <div class="log-item">
+                <span class="log-label">1. Whisper 원문 (STT Raw):</span>
+                <span id="rawSttText" class="log-value"></span>
+            </div>
+            <div class="log-item">
+                <span class="log-label">2. LLM 보정문 (Corrected):</span>
+                <span id="sttText" class="log-value" style="color: #818cf8; font-weight: bold;"></span>
+            </div>
+            <div class="log-item">
+                <span class="log-label">3. LLM 실제 응답 (Raw JSON Response):</span>
+                <span id="llmRawOutput" class="log-value" style="color: #fbbf24; background: #0f172a; padding: 8px; display: block; border-radius: 4px; margin-top: 5px; border: 1px solid #1e293b;"></span>
+            </div>
+            <div class="log-item">
+                <span class="log-label">4. 추출된 어휘 리스트 (Parsed):</span>
+                <span id="rawExtractedWords" class="log-value" style="color: #4ade80;"></span>
+            </div>
+        </div>
+
+        <hr>
+
+        <h4>✅ 학습 단어 선택 (사전 검증 완료)</h4>
+        <p style="font-size: 0.85em; color: #666; margin-bottom: 15px;">기초사전에 등록된 유효한 단어들입니다. 단어장에 추가할 단어를 선택하세요.</p>
+        <div id="candidateList"></div>
+        
+        <button id="generateBtn" onclick="generateCards()" style="margin-top: 15px;">선택한 단어로 단어장 생성</button>
+        <div id="loader2" class="loader">LLM이 예문을 만들고 음성(TTS)을 생성하고 있습니다...</div>
+    </div>
+
+    <div class="card" id="step3" style="display: none;">
+        <h3>Step 3. 생성된 K-Recorder 단어장</h3>
+        <div id="resultCards"></div>
+    </div>
+
+    <script>
+        let currentCandidates = {};
+
+        async function uploadAudio() {
+            const fileInput = document.getElementById('audioFile');
+            if (!fileInput.files[0]) {
+                alert("오디오 파일을 선택해주세요.");
+                return;
+            }
+
+            document.getElementById('loader1').style.display = 'block';
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('step2').style.display = 'none';
+            document.getElementById('step3').style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                const response = await fetch('/api/scan/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error("서버 응답 에러");
+                
+                const data = await response.json();
+                
+                // --- 중간 결과 UI 반영 ---
+                document.getElementById('rawSttText').innerText = data.raw_text || "데이터 없음";
+                document.getElementById('sttText').innerText = data.corrected_text || "데이터 없음";
+                
+                // LLM의 날것의 응답 표시
+                document.getElementById('llmRawOutput').innerText = data.llm_raw_output || "응답 없음";
+                
+                // 파싱된 단어 리스트 표시
+                if (data.extracted_words && data.extracted_words.length > 0) {
+                    document.getElementById('rawExtractedWords').innerText = data.extracted_words.join(", ");
+                } else {
+                    document.getElementById('rawExtractedWords').innerText = "추출된 단어 없음";
+                }
+                // -----------------------
+
+                currentCandidates = data.candidates;
+                
+                const listDiv = document.getElementById('candidateList');
+                listDiv.innerHTML = '';
+                
+                const candidateEntries = Object.entries(currentCandidates);
+                if (candidateEntries.length === 0) {
+                    listDiv.innerHTML = '<p style="color: #ef4444; font-size: 0.9em;">사전에서 검증된 단어가 없습니다. 위 로그의 Raw Response를 확인해 보세요.</p>';
+                } else {
+                    for (const [word, info] of candidateEntries) {
+                        const div = document.createElement('div');
+                        div.className = 'word-item';
+                        div.innerHTML = `
+                            <label style="display: block; cursor: pointer;">
+                                <input type="checkbox" value="${word}" checked> 
+                                <strong>${word}</strong> <span style="color:#666; font-size:0.85em; margin-left: 5px;">[${info.pos}]</span>
+                                <div style="font-size: 0.85em; color: #475569; margin-top: 5px; padding-left: 20px;">
+                                    ${info.definition}
+                                </div>
+                            </label>
+                        `;
+                        listDiv.appendChild(div);
+                    }
+                }
+
+                document.getElementById('step2').style.display = 'block';
+                document.getElementById('step2').scrollIntoView({ behavior: 'smooth' });
+
+            } catch (err) {
+                alert("분석 오류: " + err.message);
+            } finally {
+                document.getElementById('loader1').style.display = 'none';
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        }
+
+        async function generateCards() {
+            const checkboxes = document.querySelectorAll('#candidateList input[type="checkbox"]:checked');
+            const selectedWords = {};
+            
+            checkboxes.forEach(cb => {
+                selectedWords[cb.value] = currentCandidates[cb.value];
+            });
+
+            if (Object.keys(selectedWords).length === 0) {
+                alert("단어를 하나 이상 선택해주세요.");
+                return;
+            }
+
+            document.getElementById('loader2').style.display = 'block';
+            document.getElementById('generateBtn').disabled = true;
+
+            try {
+                const response = await fetch('/api/scan/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ selected_words: selectedWords })
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('resultCards');
+                resultDiv.innerHTML = '';
+
+                data.cards.forEach(card => {
+                    let examplesHtml = card.examples.map((ex, idx) => `
+                        <div style="margin-top: 12px; font-size: 0.9em; background: #f1f5f9; padding: 10px; border-radius: 5px;">
+                            <p style="margin: 0; font-weight: 500;">🇰🇷 ${ex.korean}</p>
+                            <p style="margin: 3px 0 8px 0; color: #666; font-size: 0.95em;">🇺🇸 ${ex.english}</p>
+                            <audio controls src="/${card.audio.examples_tts[idx]}"></audio>
+                        </div>
+                    `).join('');
+
+                    const cardHtml = `
+                        <div class="vocab-card">
+                            <h2 style="margin: 0; color: #4f46e5;">${card.word} <span style="font-size: 0.5em; color: #94a3b8; font-weight: normal;">${card.pronunciation}</span></h2>
+                            <p style="margin: 8px 0; font-size: 0.9em;"><strong>분류:</strong> <span style="color: #0891b2;">${card.semantic_category || '일반'}</span></p>
+                            <p style="margin: 5px 0;"><strong>뜻:</strong> ${card.definition_korean}</p>
+                            <p style="margin: 5px 0; color: #64748b; font-style: italic;"><strong>Meaning:</strong> ${card.definition_english}</p>
+                            <audio controls src="/${card.audio.word_tts}"></audio>
+                            <hr style="margin: 15px 0; border-top: 1px dashed #e2e8f0;">
+                            <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #475569;">Learning Examples</h4>
+                            ${examplesHtml}
+                        </div>
+                    `;
+                    resultDiv.innerHTML += cardHtml;
+                });
+
+                document.getElementById('step3').style.display = 'block';
+                document.getElementById('step3').scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                alert("생성 오류: " + err);
+            } finally {
+                document.getElementById('loader2').style.display = 'none';
+                document.getElementById('generateBtn').disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
