@@ -293,7 +293,43 @@ class KoreanLearningPipeline:
             "extracted_words": extracted_words,   
             "candidates": valid_candidates
         }
-
+    async def search_dictionary_candidates(self, query: str, source_lang: str = "러시아어 또는 영어") -> dict:
+        """
+        사전 검색: 외국어 -> 한국어 단어 후보 추출 및 사전 검증
+        """
+        print(f"\n[Dict Search] '{query}' ({source_lang}) 한국어 단어 매칭 중...", flush=True)
+        
+        # 1. LLM을 이용해 입력된 외국어에 가장 잘 맞는 한국어 기초 어휘 추출
+        prompt = PromptTemplate.from_template(
+            "당신은 한국어 교육 전문가입니다. 학습자가 입력한 {source_lang} 단어/문장 '{query}'에 해당하는 "
+            "가장 자연스러운 한국어 기초 어휘(명사, 동사/형용사는 반드시 사전형) 1~3개를 추천해주세요.\n\n"
+            "반드시 아래의 JSON 배열(문자열 리스트) 형식으로만 응답하세요.\n"
+            '["단어1", "단어2"]'
+        )
+        chain = prompt | self.llm 
+        
+        try:
+            response = await chain.ainvoke({"source_lang": source_lang, "query": query})
+            llm_raw_output = response.content.strip() 
+            cleaned_output = re.sub(r'```json\n?|```', '', llm_raw_output).strip()
+            
+            try:
+                extracted_words = json.loads(cleaned_output)
+            except Exception:
+                extracted_words = re.findall(r'[가-힣]+', cleaned_output)
+                
+            # 2. 추출된 한국어 단어들을 기존 기초사전 API로 검증
+            # 팁: 다의어 구분을 위해 사용자의 원래 검색어(query)를 문맥(context_text)으로 넘겨줍니다.
+            # 예: "apple" 검색 시 -> LLM이 "사과"의 뜻을 '과일'로 정확히 타겟팅함.
+            context_text = f"이 단어는 {source_lang} '{query}'의 의미를 가집니다."
+            valid_candidates = await self.filter_with_dict(extracted_words, context_text)
+            
+            print(f"  사전검색 완료. 후보군: {list(valid_candidates.keys())}", flush=True)
+            return valid_candidates
+            
+        except Exception as e:
+            print(f"  사전검색 failed: {e}", flush=True)
+            return {}
     async def phase2_generate(self, selected_words: dict, output_dir: str) -> list:
         """Phase 2: 선택된 단어 딕셔너리 수신 -> LLM 예문 -> TTS 생성 -> 파일 저장"""
         os.makedirs(output_dir, exist_ok=True)
@@ -340,6 +376,7 @@ class KoreanLearningPipeline:
             # 개별 단어 JSON 저장
             with open(os.path.join(word_dir, f"{word}_card.json"), 'w', encoding='utf-8') as f:
                 json.dump(word_card, f, ensure_ascii=False, indent=4)
+        
 
         # 전체 결과 병합 JSON 저장
         if final_cards:

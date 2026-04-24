@@ -31,7 +31,6 @@ class GenerateRequest(BaseModel):
 async def generate_cards_for_test(req: GenerateRequest):
     """Phase 2: 선택된 단어 기반 학습 카드 및 TTS 생성 (HTML 테스트 전용)"""
     try:
-        # 프론트에서 접근 가능한 static 폴더에 저장
         output_dir = "static/tts/test_user"
         final_cards = await nlp_pipeline.phase2_generate(req.selected_words, output_dir)
         return {"status": "success", "cards": final_cards}
@@ -49,9 +48,11 @@ async def process_scan_result(
     matched = []
     new_candidates_for_generation = {}
 
+    # 1. 기존 유저 단어장 조회
     user_words = db.query(WordCard).filter(WordCard.user_id == current_user.id).all()
     word_map = {card.korean_word: card for card in user_words}
 
+    # 2. 추출된 단어 분류 (기존 DB 단어 vs 신규 단어)
     for word, info in body.extracted_words.items():
         if word in word_map:
             card = word_map[word]
@@ -65,15 +66,36 @@ async def process_scan_result(
         else:
             new_candidates_for_generation[word] = info
 
+    # 스캔 횟수 증가분 우선 반영
     db.commit()
 
     generated_cards = []
+    
+    # 3. 신규 단어 파이프라인 처리 및 DB Insert
     if new_candidates_for_generation:
         user_output_dir = f"static/tts/user_{current_user.id}"
         generated_cards = await nlp_pipeline.phase2_generate(
             selected_words=new_candidates_for_generation,
             output_dir=user_output_dir
         )
+        
+        # 새롭게 생성된 단어 카드를 WordCard DB에 등록
+        for card_data in generated_cards:
+            new_word_card = WordCard(
+                user_id=current_user.id,
+                korean_word=card_data["word"],
+                english_meaning=card_data["definition_english"],
+                korean_definition=card_data["definition_korean"],
+                part_of_speech=card_data["pos_type"],
+                semantic_category=card_data["semantic_category"],
+                pronunciation=card_data["pronunciation"],
+                audio_path_word=card_data["audio"]["word_tts"],
+                scan_count=1  # 처음 생성 시 기본 1회 스캔으로 인정
+            )
+            db.add(new_word_card)
+        
+        # 신규 단어 DB 반영
+        db.commit()
 
     return AudioScanResponse(
         matched_words=matched, 
@@ -85,7 +107,6 @@ async def process_scan_result(
 async def upload_audio(
     file: UploadFile = File(...),
     scan_source: str = Form("mic"),
-    # 🚨 주의: HTML 프로토타입 테스트 시에는 Depends(get_current_user)를 주석 처리해야 401 에러가 나지 않습니다.
 ):
     """
     오디오 파일을 받아 Demucs → Whisper → LLM 분석 후 모든 중간 결과를 HTML에 반환.
@@ -95,21 +116,19 @@ async def upload_audio(
 
     audio_bytes = await file.read()
     
-    # 1. 오디오 엔진 (Demucs + Whisper) 실행
     raw_whisper_text = extract_text_from_audio(
         audio_bytes=audio_bytes,
         ffmpeg_bin=settings.FFMPEG_BIN,
         whisper_model_size=settings.WHISPER_MODEL,
     )
     
-    # 2. NLP 파이프라인 분석 실행 (Phase 1: 보정, 추출, 사전 검증)
     analysis_result = await nlp_pipeline.phase1_analyze(raw_whisper_text)
     
     return {
         "scan_source": scan_source,
         "raw_text": raw_whisper_text,
         "corrected_text": analysis_result["corrected_text"],
-        "llm_raw_output": analysis_result["llm_raw_output"],    # LLM 답변 원문 추가
-        "extracted_words": analysis_result["extracted_words"], # 필터링 전 단어 리스트 추가
-        "candidates": analysis_result["candidates"]            # 사전 검증 완료 단어
+        "llm_raw_output": analysis_result["llm_raw_output"],
+        "extracted_words": analysis_result["extracted_words"],
+        "candidates": analysis_result["candidates"]
     }
