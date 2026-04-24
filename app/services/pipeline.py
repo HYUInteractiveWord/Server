@@ -216,34 +216,76 @@ class KoreanLearningPipeline:
             
         return valid_candidates
 
-    async def fetch_on_term_category(self, original_word: str) -> str:
-        """온용어 세부 분류 태그 검색"""
+    async def fetch_on_term_category(self, original_word: str, target_definition: str = "") -> str:
+        """온용어 세부 분류 태그 검색 (의미 기반 스마트 매칭)"""
         nouns = self.okt.nouns(original_word)
         search_keyword = nouns[0] if nouns else original_word
-        url = "https://kli.korean.go.kr/term/api/search"
-        params = {"key": self.term_api_key, "q": search_keyword, "target": "JSON"}
         
-
+        url = "https://kli.korean.go.kr/term/api/search.do"
+        params = {
+            "key": self.term_api_key, 
+            "apiSearchWord": search_keyword, 
+            "start": 1, 
+            "num": 10
+        }
+        
         def _sync_request():
-            response = requests.get(url, params=params)
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(url, params=params, headers=headers, timeout=10, verify=False)
             response.raise_for_status()
             return response.json()
 
         try:
             data = await asyncio.to_thread(_sync_request)
             channel = data.get("channel", {})
-            if channel.get("total", 0) > 0:
+            
+            if int(channel.get("total", 0)) == 0:
+                return ""
+                
+            if int(channel.get("total", 0)) > 0:
                 return_objects = channel.get("return_object", [])
                 if return_objects and return_objects[0].get("returnCode") == 1:
                     result_list = return_objects[0].get("resultlist", [])
                     if result_list:
-                        target_data = result_list[0]
+                        
+                        # [핵심 로직] 타겟 뜻이 주어졌고, 온용어 결과가 여러 개인 경우 LLM으로 뜻 비교
+                        if target_definition and len(result_list) > 1:
+                            candidates_str = ""
+                            
+                            for i, item in enumerate(result_list):
+                                cat_main = item.get("category_main", "")
+                                cat_sub = item.get("category_sub", "")
+                                item_def = item.get("definition", "정의 없음")
+                                candidates_str += f"{i}. [{cat_main} - {cat_sub}] {item_def}\n"
+                            
+                            prompt = PromptTemplate.from_template(
+                                "당신은 한국어 의미 분석기입니다. 단어 '{word}'에 대해 우리가 찾고자 하는 [목표 뜻]은 다음과 같습니다.\n"
+                                "[목표 뜻]: {target_definition}\n\n"
+                                "[온용어 사전 후보]\n"
+                                "{candidates}\n\n"
+                                "위 후보 중 [목표 뜻]과 의미가 가장 일치하는 번호(index)를 찾으세요. JSON 형식으로 응답하세요.\n"
+                                "{{\n  \"best_index\": 0\n}}"
+                            )
+                            chain = prompt | self.llm | self.json_parser
+                            try:
+                                result = await chain.ainvoke({
+                                    "word": original_word, 
+                                    "target_definition": target_definition, 
+                                    "candidates": candidates_str
+                                })
+                                best_idx = result.get("best_index", 0)
+                                target_data = result_list[best_idx] if 0 <= best_idx < len(result_list) else result_list[0]
+                            except Exception:
+                                target_data = result_list[0]
+                        else:
+                            target_data = result_list[0]
+                            
                         category_main = target_data.get("category_main", "")
                         category_sub = target_data.get("category_sub", "")
                         return f"{category_main} - {category_sub}".strip(" -")
             return ""
         except Exception as e:
-            print(f"  [Error] fetch_on_term_category failed for '{original_word}': {e}", flush=True)
+            print(f"  ❌ 온용어 검색 오류: {e}", flush=True)
             return ""
 
     async def process_with_llm(self, word_raw: str, definition: str, pos: str) -> dict:
@@ -340,7 +382,7 @@ class KoreanLearningPipeline:
             word_dir = os.path.join(output_dir, word)
             os.makedirs(word_dir, exist_ok=True)
 
-            semantic_category = await self.fetch_on_term_category(word)
+            semantic_category = await self.fetch_on_term_category(word, info["definition"])
             
             # 공공 API Rate Limit(429) 방지를 위한 짧은 대기
             await asyncio.sleep(0.2)

@@ -10,6 +10,11 @@
         .profile { font-size: 0.9em; color: #666; background: #e2e8f0; padding: 5px 10px; border-radius: 15px; }
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
         
+        /* 탭 스타일 */
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
+        .tab-btn { background: none; border: none; padding: 10px 20px; font-size: 1.1em; cursor: pointer; color: #64748b; margin-right: 5px; border-radius: 8px 8px 0 0; }
+        .tab-btn.active { background: #4f46e5; color: white; font-weight: bold; }
+        
         /* 분석 로그 스타일 */
         .analysis-log { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-size: 0.85em; color: #cbd5e1; }
         .analysis-log h4 { margin-top: 0; margin-bottom: 12px; color: #94a3b8; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #334155; padding-bottom: 5px; }
@@ -17,6 +22,7 @@
         .log-label { font-weight: bold; color: #38bdf8; display: block; margin-bottom: 2px; }
         .log-value { color: #f1f5f9; white-space: pre-wrap; word-break: break-all; font-family: 'Courier New', Courier, monospace; }
 
+        input[type="text"], select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 1em; margin-right: 10px; width: calc(100% - 150px); max-width: 300px; }
         button { background-color: #4f46e5; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 1em; }
         button:hover { background-color: #4338ca; }
         button:disabled { background-color: #a5b4fc; cursor: not-allowed; }
@@ -37,60 +43,102 @@
         <span class="profile">Welcome, seo</span>
     </div>
 
-    <div class="card" id="step1">
-        <h3>Step 1. 오디오 분석 (Demucs + Whisper + LLM)</h3>
-        <input type="file" id="audioFile" accept="audio/*">
-        <button id="uploadBtn" onclick="uploadAudio()">분석 시작</button>
-        <div id="loader1" class="loader">AI가 음성을 분리하고 텍스트를 분석 중입니다...</div>
+    <div class="tabs">
+        <button class="tab-btn active" id="btnScan" onclick="switchTab('scan')">🎤 음성 스캔</button>
+        <button class="tab-btn" id="btnDict" onclick="switchTab('dict')">📖 다국어 사전 검색</button>
     </div>
 
-    <div class="card" id="step2" style="display: none;">
-        <h3>Step 2. AI 분석 결과 확인</h3>
-        
-        <div class="analysis-log">
-            <h4>🔍 AI Pipeline Debugging Logs</h4>
-            <div class="log-item">
-                <span class="log-label">1. Whisper 원문 (STT Raw):</span>
-                <span id="rawSttText" class="log-value"></span>
-            </div>
-            <div class="log-item">
-                <span class="log-label">2. LLM 보정문 (Corrected):</span>
-                <span id="sttText" class="log-value" style="color: #818cf8; font-weight: bold;"></span>
-            </div>
-            <div class="log-item">
-                <span class="log-label">3. LLM 실제 응답 (Raw JSON Response):</span>
-                <span id="llmRawOutput" class="log-value" style="color: #fbbf24; background: #0f172a; padding: 8px; display: block; border-radius: 4px; margin-top: 5px; border: 1px solid #1e293b;"></span>
-            </div>
-            <div class="log-item">
-                <span class="log-label">4. 추출된 어휘 리스트 (Parsed):</span>
-                <span id="rawExtractedWords" class="log-value" style="color: #4ade80;"></span>
-            </div>
+    <div id="sectionScan">
+        <div class="card" id="step1">
+            <h3>Step 1. 오디오 분석 (Demucs + Whisper + LLM)</h3>
+            <input type="file" id="audioFile" accept="audio/*">
+            <button id="uploadBtn" onclick="uploadAudio()">분석 시작</button>
+            <div id="loader1" class="loader">AI가 음성을 분리하고 텍스트를 분석 중입니다...</div>
         </div>
 
-        <hr>
+        <div class="card" id="step2" style="display: none;">
+            <h3>Step 2. AI 분석 결과 확인</h3>
+            <div class="analysis-log">
+                <h4>🔍 AI Pipeline Debugging Logs</h4>
+                <div class="log-item">
+                    <span class="log-label">1. Whisper 원문 (STT Raw):</span>
+                    <span id="rawSttText" class="log-value"></span>
+                </div>
+                <div class="log-item">
+                    <span class="log-label">2. LLM 보정문 (Corrected):</span>
+                    <span id="sttText" class="log-value" style="color: #818cf8; font-weight: bold;"></span>
+                </div>
+                <div class="log-item">
+                    <span class="log-label">3. 추출된 어휘 리스트 (Parsed):</span>
+                    <span id="rawExtractedWords" class="log-value" style="color: #4ade80;"></span>
+                </div>
+            </div>
+            <hr>
+            <h4>✅ 학습 단어 선택</h4>
+            <p style="font-size: 0.85em; color: #666;">기초사전에 등록된 유효한 단어들입니다. 추가할 단어를 선택하세요.</p>
+            <div id="candidateList"></div>
+            
+            <button id="generateBtn" onclick="generateCards('scan')" style="margin-top: 15px;">선택한 단어로 단어장 생성</button>
+            <div id="loader2" class="loader">LLM이 예문과 음성(TTS)을 생성 중입니다...</div>
+        </div>
+    </div>
 
-        <h4>✅ 학습 단어 선택 (사전 검증 완료)</h4>
-        <p style="font-size: 0.85em; color: #666; margin-bottom: 15px;">기초사전에 등록된 유효한 단어들입니다. 단어장에 추가할 단어를 선택하세요.</p>
-        <div id="candidateList"></div>
-        
-        <button id="generateBtn" onclick="generateCards()" style="margin-top: 15px;">선택한 단어로 단어장 생성</button>
-        <div id="loader2" class="loader">LLM이 예문을 만들고 음성(TTS)을 생성하고 있습니다...</div>
+    <div id="sectionDict" style="display: none;">
+        <div class="card">
+            <h3>Step 1. 다국어 기반 한국어 단어 검색</h3>
+            <p style="font-size: 0.85em; color: #666; margin-bottom: 15px;">영어 또는 러시아어로 입력하면, AI가 가장 적절한 한국어 단어를 찾아줍니다.</p>
+            
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <select id="dictLang" style="width: 120px;">
+                    <option value="러시아어">러시아어</option>
+                    <option value="영어">영어</option>
+                </select>
+                <input type="text" id="dictQuery" placeholder="예: apple, яблоко">
+                <button id="searchBtn" onclick="searchDict()">검색</button>
+            </div>
+            <div id="loaderDict" class="loader">AI가 한국어 매칭 및 사전 검증을 진행 중입니다...</div>
+        </div>
+
+        <div class="card" id="dictStep2" style="display: none;">
+            <h3>Step 2. 검색된 단어 매칭 결과</h3>
+            <p style="font-size: 0.85em; color: #666;">해당 외국어의 의미를 가지는 한국어 단어입니다.</p>
+            <div id="dictCandidateList"></div>
+            
+            <button id="generateDictBtn" onclick="generateCards('dict')" style="margin-top: 15px;">이 단어를 내 단어장에 추가하기</button>
+            <div id="loaderDictGen" class="loader">LLM이 예문과 음성(TTS)을 생성 중입니다...</div>
+        </div>
     </div>
 
     <div class="card" id="step3" style="display: none;">
         <h3>Step 3. 생성된 K-Recorder 단어장</h3>
+        <p style="font-size: 0.85em; color: #f43f5e;" id="pointWarning"></p>
         <div id="resultCards"></div>
     </div>
 
     <script>
         let currentCandidates = {};
 
+        // 탭 전환 로직
+        function switchTab(tabName) {
+            document.getElementById('btnScan').classList.remove('active');
+            document.getElementById('btnDict').classList.remove('active');
+            document.getElementById('sectionScan').style.display = 'none';
+            document.getElementById('sectionDict').style.display = 'none';
+            document.getElementById('step3').style.display = 'none'; // 결과창 숨김
+
+            if(tabName === 'scan') {
+                document.getElementById('btnScan').classList.add('active');
+                document.getElementById('sectionScan').style.display = 'block';
+            } else {
+                document.getElementById('btnDict').classList.add('active');
+                document.getElementById('sectionDict').style.display = 'block';
+            }
+        }
+
+        // [기능 1] 오디오 스캔
         async function uploadAudio() {
             const fileInput = document.getElementById('audioFile');
-            if (!fileInput.files[0]) {
-                alert("오디오 파일을 선택해주세요.");
-                return;
-            }
+            if (!fileInput.files[0]) { alert("오디오 파일을 선택해주세요."); return; }
 
             document.getElementById('loader1').style.display = 'block';
             document.getElementById('uploadBtn').disabled = true;
@@ -101,58 +149,19 @@
             formData.append('file', fileInput.files[0]);
 
             try {
-                const response = await fetch('/api/scan/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                
+                const response = await fetch('/api/scan/upload', { method: 'POST', body: formData });
                 if (!response.ok) throw new Error("서버 응답 에러");
-                
                 const data = await response.json();
                 
-                // --- 중간 결과 UI 반영 ---
                 document.getElementById('rawSttText').innerText = data.raw_text || "데이터 없음";
                 document.getElementById('sttText').innerText = data.corrected_text || "데이터 없음";
-                
-                // LLM의 날것의 응답 표시
-                document.getElementById('llmRawOutput').innerText = data.llm_raw_output || "응답 없음";
-                
-                // 파싱된 단어 리스트 표시
-                if (data.extracted_words && data.extracted_words.length > 0) {
-                    document.getElementById('rawExtractedWords').innerText = data.extracted_words.join(", ");
-                } else {
-                    document.getElementById('rawExtractedWords').innerText = "추출된 단어 없음";
-                }
-                // -----------------------
+                document.getElementById('rawExtractedWords').innerText = (data.extracted_words || []).join(", ") || "없음";
 
                 currentCandidates = data.candidates;
-                
-                const listDiv = document.getElementById('candidateList');
-                listDiv.innerHTML = '';
-                
-                const candidateEntries = Object.entries(currentCandidates);
-                if (candidateEntries.length === 0) {
-                    listDiv.innerHTML = '<p style="color: #ef4444; font-size: 0.9em;">사전에서 검증된 단어가 없습니다. 위 로그의 Raw Response를 확인해 보세요.</p>';
-                } else {
-                    for (const [word, info] of candidateEntries) {
-                        const div = document.createElement('div');
-                        div.className = 'word-item';
-                        div.innerHTML = `
-                            <label style="display: block; cursor: pointer;">
-                                <input type="checkbox" value="${word}" checked> 
-                                <strong>${word}</strong> <span style="color:#666; font-size:0.85em; margin-left: 5px;">[${info.pos}]</span>
-                                <div style="font-size: 0.85em; color: #475569; margin-top: 5px; padding-left: 20px;">
-                                    ${info.definition}
-                                </div>
-                            </label>
-                        `;
-                        listDiv.appendChild(div);
-                    }
-                }
+                renderCandidateList('candidateList', currentCandidates);
 
                 document.getElementById('step2').style.display = 'block';
                 document.getElementById('step2').scrollIntoView({ behavior: 'smooth' });
-
             } catch (err) {
                 alert("분석 오류: " + err.message);
             } finally {
@@ -161,23 +170,85 @@
             }
         }
 
-        async function generateCards() {
-            const checkboxes = document.querySelectorAll('#candidateList input[type="checkbox"]:checked');
-            const selectedWords = {};
+        // [기능 2] 다국어 사전 검색
+        async function searchDict() {
+            const query = document.getElementById('dictQuery').value.trim();
+            const lang = document.getElementById('dictLang').value;
             
-            checkboxes.forEach(cb => {
-                selectedWords[cb.value] = currentCandidates[cb.value];
-            });
+            if (!query) { alert("검색할 단어를 입력하세요."); return; }
 
-            if (Object.keys(selectedWords).length === 0) {
-                alert("단어를 하나 이상 선택해주세요.");
-                return;
-            }
-
-            document.getElementById('loader2').style.display = 'block';
-            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('loaderDict').style.display = 'block';
+            document.getElementById('searchBtn').disabled = true;
+            document.getElementById('dictStep2').style.display = 'none';
+            document.getElementById('step3').style.display = 'none';
 
             try {
+                const response = await fetch(`/api/dictionary/search?word=${encodeURIComponent(query)}&source_lang=${encodeURIComponent(lang)}`);
+                
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.detail || "검색 실패");
+                }
+                
+                const data = await response.json();
+                currentCandidates = data.candidates;
+                
+                renderCandidateList('dictCandidateList', currentCandidates);
+
+                document.getElementById('dictStep2').style.display = 'block';
+                document.getElementById('dictStep2').scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                alert("사전 검색 오류: " + err.message);
+            } finally {
+                document.getElementById('loaderDict').style.display = 'none';
+                document.getElementById('searchBtn').disabled = false;
+            }
+        }
+
+        // UI에 후보군 렌더링
+        function renderCandidateList(containerId, candidates) {
+            const listDiv = document.getElementById(containerId);
+            listDiv.innerHTML = '';
+            
+            const entries = Object.entries(candidates);
+            if (entries.length === 0) {
+                listDiv.innerHTML = '<p style="color: #ef4444; font-size: 0.9em;">유효한 단어를 찾지 못했습니다.</p>';
+            } else {
+                for (const [word, info] of entries) {
+                    const div = document.createElement('div');
+                    div.className = 'word-item';
+                    div.innerHTML = `
+                        <label style="display: block; cursor: pointer;">
+                            <input type="checkbox" value="${word}" checked> 
+                            <strong>${word}</strong> <span style="color:#666; font-size:0.85em; margin-left: 5px;">[${info.pos}]</span>
+                            <div style="font-size: 0.85em; color: #475569; margin-top: 5px; padding-left: 20px;">
+                                ${info.definition}
+                            </div>
+                        </label>
+                    `;
+                    listDiv.appendChild(div);
+                }
+            }
+        }
+
+        // 공통: 단어장 생성 (테스트용이므로 인증이 필요 없는 /api/scan/generate 사용)
+        async function generateCards(sourceType) {
+            const containerId = sourceType === 'scan' ? 'candidateList' : 'dictCandidateList';
+            const checkboxes = document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`);
+            const selectedWords = {};
+            
+            checkboxes.forEach(cb => { selectedWords[cb.value] = currentCandidates[cb.value]; });
+
+            if (Object.keys(selectedWords).length === 0) { alert("단어를 하나 이상 선택해주세요."); return; }
+
+            const loaderId = sourceType === 'scan' ? 'loader2' : 'loaderDictGen';
+            const btnId = sourceType === 'scan' ? 'generateBtn' : 'generateDictBtn';
+            
+            document.getElementById(loaderId).style.display = 'block';
+            document.getElementById(btnId).disabled = true;
+
+            try {
+                // 테스트 UI이므로 DB 저장을 건너뛰고 Pipeline 생성 로직만 확인하는 엔드포인트 호출
                 const response = await fetch('/api/scan/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -185,6 +256,17 @@
                 });
 
                 const data = await response.json();
+                
+                // 포인트 관련 경고 문구 설정
+                const warningP = document.getElementById('pointWarning');
+                if(sourceType === 'scan') {
+                    warningP.innerHTML = "💡 스캔 모드: 이미 단어장에 있는 단어라면 <strong>리스닝 포인트(Scan Count)</strong>가 증가합니다.";
+                    warningP.style.color = "#4f46e5";
+                } else {
+                    warningP.innerHTML = "🚨 사전 모드: 이미 단어장에 있는 단어라도 <strong>포인트가 증가하지 않습니다.</strong>";
+                    warningP.style.color = "#f43f5e";
+                }
+
                 const resultDiv = document.getElementById('resultCards');
                 resultDiv.innerHTML = '';
 
@@ -217,8 +299,8 @@
             } catch (err) {
                 alert("생성 오류: " + err);
             } finally {
-                document.getElementById('loader2').style.display = 'none';
-                document.getElementById('generateBtn').disabled = false;
+                document.getElementById(loaderId).style.display = 'none';
+                document.getElementById(btnId).disabled = false;
             }
         }
     </script>
