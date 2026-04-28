@@ -39,10 +39,20 @@ if not exist .venv (
     echo.
     echo Installing LLM Engine
     set "FORCE_CMAKE=1"
-    set "CMAKE_ARGS=-DGGML_CUDA=on -DCMAKE_CXX_FLAGS=/utf-8 -DCMAKE_C_FLAGS=/utf-8 -G Ninja"
+    set "CMAKE_ARGS=-DCMAKE_CXX_FLAGS=/utf-8 -DCMAKE_C_FLAGS=/utf-8"
     pip install --no-cache-dir llama-cpp-python[server]
 ) else (
     call .venv\Scripts\activate
+
+    python -c "import llama_cpp" 2>nul || (
+        echo llama-cpp-python not found. Installing...
+        pip install ninja
+        call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" 2>nul
+        call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat" 2>nul
+        set "FORCE_CMAKE=1"
+        set "CMAKE_ARGS=-DCMAKE_CXX_FLAGS=/utf-8 -DCMAKE_C_FLAGS=/utf-8"
+        pip install --no-cache-dir llama-cpp-python[server]
+    )
 )
 
 echo.
