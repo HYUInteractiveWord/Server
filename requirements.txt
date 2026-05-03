@@ -26,3 +26,4 @@ langchain-openai==0.1.14
 edge-tts==7.2.8
 httpx
 soundfile
+yt-dlp>=2023.1.1
