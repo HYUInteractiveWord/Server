@@ -18,6 +18,9 @@ class WordCardResponse(BaseModel):
     level: int
     best_score: float
     scan_count: int
+    word_point: int = 0
+    speaking_count: int = 0
+    effect_level: int = 0
     source: str
     created_at: datetime
 

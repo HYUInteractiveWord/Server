@@ -20,6 +20,9 @@ class WordCard(Base):
     level = Column(Integer, default=1)    # 1~5
     best_score = Column(Float, default=0.0)  # 최고 발음 점수 0~100
     scan_count = Column(Integer, default=0)  # 스캔된 횟수
+    word_point = Column(Integer, default=0)
+    speaking_count = Column(Integer, default=0)
+    effect_level = Column(Integer, default=0)
 
     # 수집 방법: "scan" | "dictionary"
     source = Column(String, default="dictionary")
