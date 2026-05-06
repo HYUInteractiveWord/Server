@@ -15,7 +15,7 @@ echo "[2/4] 가상환경 확인"
 echo "=================================================="
 if [ ! -d ".venv" ]; then
     echo "가상환경 생성 중..."
-    python3.11 -m venv .venv
+    python3 -m venv .venv --system-site-packages
     source .venv/bin/activate
 
     echo "기본 패키지 설치 중..."
