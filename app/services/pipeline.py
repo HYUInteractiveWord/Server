@@ -335,6 +335,7 @@ class KoreanLearningPipeline:
             "extracted_words": extracted_words,   
             "candidates": valid_candidates
         }
+
     async def search_dictionary_candidates(self, query: str, source_lang: str = "러시아어 또는 영어") -> dict:
         """
         사전 검색: 외국어 -> 한국어 단어 후보 추출 및 사전 검증
@@ -361,8 +362,6 @@ class KoreanLearningPipeline:
                 extracted_words = re.findall(r'[가-힣]+', cleaned_output)
                 
             # 2. 추출된 한국어 단어들을 기존 기초사전 API로 검증
-            # 팁: 다의어 구분을 위해 사용자의 원래 검색어(query)를 문맥(context_text)으로 넘겨줍니다.
-            # 예: "apple" 검색 시 -> LLM이 "사과"의 뜻을 '과일'로 정확히 타겟팅함.
             context_text = f"이 단어는 {source_lang} '{query}'의 의미를 가집니다."
             valid_candidates = await self.filter_with_dict(extracted_words, context_text)
             
@@ -372,6 +371,84 @@ class KoreanLearningPipeline:
         except Exception as e:
             print(f"  사전검색 failed: {e}", flush=True)
             return {}
+
+    # ==========================================
+    # [신규 기능 1] 단어 학습 임시 프리뷰 생성
+    # ==========================================
+    async def generate_word_preview(self, word: str, definition: str, pos: str, output_dir: str) -> dict:
+        """사전에서 선택한 단어의 임시 프리뷰 생성 (발음기호, 영어 번역, 단어 음성만 빠르게 생성)"""
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"\n[Preview] '{word}' 임시 확인용 데이터 생성 중...", flush=True)
+        
+        prompt = PromptTemplate.from_template(
+            "당신은 한국어 교육 전문가입니다.\n"
+            "[단어]: {word}\n[품사]: {pos}\n[정의]: {definition}\n\n"
+            "이 단어에 대해 아래 JSON을 생성하세요:\n"
+            "1. english_definition (정의의 영어 번역)\n"
+            "2. romanization (단어의 로마자 발음 표기)\n"
+            "{{\n"
+            '  "english_definition": "...",\n'
+            '  "romanization": "..."\n'
+            "}}"
+        )
+        chain = prompt | self.llm | self.json_parser
+        try:
+            llm_result = await chain.ainvoke({"word": word, "definition": definition, "pos": pos})
+        except Exception as e:
+            print(f"  [Error] Preview LLM failed: {e}", flush=True)
+            llm_result = {"english_definition": "", "romanization": ""}
+            
+        # 단어 TTS만 임시로 생성
+        word_audio_path = os.path.join(output_dir, f"temp_{word}_word.mp3")
+        await self.generate_tts(word, word_audio_path)
+        
+        return {
+            "word": word,
+            "pos_type": pos,
+            "definition_korean": definition,
+            "definition_english": llm_result.get("english_definition", ""),
+            "pronunciation": llm_result.get("romanization", ""),
+            "audio_path": word_audio_path
+        }
+
+    # 발음 검증 기능
+
+    async def verify_spoken_word(self, audio_bytes: bytes, ffmpeg_bin: str, whisper_model_size: str, target_word: str) -> dict:
+        """사용자가 녹음한 음성을 분석하여 타겟 단어와 일치하는지 검증"""
+        print(f"\n[Verification] '{target_word}' 음성 검증 시작...", flush=True)
+        
+        # 1. 오디오에서 텍스트 추출 (Demucs + Whisper 동기 함수이므로 쓰레드에서 실행)
+        try:
+            raw_text = await asyncio.to_thread(
+                extract_text_from_audio, audio_bytes, ffmpeg_bin, whisper_model_size
+            )
+            print(f"  -> STT 원문: {raw_text}", flush=True)
+        except Exception as e:
+            print(f"  ❌ STT 추출 실패: {e}", flush=True)
+            return {"is_match": False, "target_word": target_word, "spoken_raw": "", "spoken_corrected": ""}
+
+        # 2. LLM을 통한 STT 오탈자 보정
+        corrected_text = await self.correct_stt_text(raw_text)
+        print(f"  -> LLM 보정문: {corrected_text}", flush=True)
+        
+        # 3. 매칭 판별
+        clean_target = re.sub(r'[^가-힣a-zA-Z0-9]', '', target_word)
+        clean_spoken = re.sub(r'[^가-힣a-zA-Z0-9]', '', corrected_text)
+        
+        is_match = clean_target in clean_spoken
+        
+        if is_match:
+            print(f"  검증 성공! (타겟 단어를 정확히 발음함)", flush=True)
+        else:
+            print(f"  검증 실패 (인식된 단어와 다름)", flush=True)
+            
+        return {
+            "is_match": is_match,
+            "target_word": target_word,
+            "spoken_raw": raw_text,
+            "spoken_corrected": corrected_text
+        }
+
     async def phase2_generate(self, selected_words: dict, output_dir: str) -> list:
         """Phase 2: 선택된 단어 딕셔너리 수신 -> LLM 예문 -> TTS 생성 -> 파일 저장"""
         os.makedirs(output_dir, exist_ok=True)

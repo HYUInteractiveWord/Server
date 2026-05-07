@@ -23,7 +23,7 @@
         .log-value { color: #f1f5f9; white-space: pre-wrap; word-break: break-all; font-family: 'Courier New', Courier, monospace; }
 
         input[type="text"], select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 1em; margin-right: 10px; width: calc(100% - 150px); max-width: 300px; }
-        button { background-color: #4f46e5; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 1em; }
+        button { background-color: #4f46e5; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 1em; transition: background-color 0.2s; }
         button:hover { background-color: #4338ca; }
         button:disabled { background-color: #a5b4fc; cursor: not-allowed; }
         
@@ -34,6 +34,12 @@
         .vocab-card { border-left: 4px solid #4f46e5; background: #fff; padding: 15px; margin-bottom: 15px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);}
         audio { height: 30px; margin-top: 5px; }
         hr { border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0; }
+
+        /* 녹음 검증 UI 스타일 */
+        .preview-box { background: #f8fafc; border: 2px dashed #cbd5e1; padding: 20px; border-radius: 10px; text-align: center; }
+        .record-btn { background-color: #10b981; margin-top: 15px; width: 100%; font-size: 1.1em; padding: 15px; }
+        .record-btn.recording { background-color: #ef4444; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
@@ -101,10 +107,33 @@
 
         <div class="card" id="dictStep2" style="display: none;">
             <h3>Step 2. 검색된 단어 매칭 결과</h3>
-            <p style="font-size: 0.85em; color: #666;">해당 외국어의 의미를 가지는 한국어 단어입니다.</p>
+            <p style="font-size: 0.85em; color: #666;">해당 외국어의 의미를 가지는 한국어 단어입니다. <strong>학습할 단어를 하나만 선택하세요.</strong></p>
             <div id="dictCandidateList"></div>
             
-            <button id="generateDictBtn" onclick="generateCards('dict')" style="margin-top: 15px;">이 단어를 내 단어장에 추가하기</button>
+            <button id="previewBtn" onclick="startPronunciationPractice()" style="margin-top: 15px; background-color: #0891b2;">이 단어 발음 연습하기</button>
+        </div>
+
+        <div class="card" id="dictStep3" style="display: none;">
+            <h3>Step 3. 발음 검증 테스트 🎙️</h3>
+            <p style="font-size: 0.85em; color: #666;">단어장에 추가하려면 올바른 발음으로 녹음하여 AI 검증을 통과해야 합니다.</p>
+            
+            <div class="preview-box">
+                <h1 id="previewWord" style="margin: 0; color: #4f46e5; font-size: 2.5em;"></h1>
+                <p id="previewPronunciation" style="color: #94a3b8; font-size: 1.2em; margin: 5px 0;"></p>
+                <p id="previewDef" style="font-size: 1.1em; color: #333; margin-bottom: 5px;"></p>
+                <p id="previewDefEng" style="font-size: 1em; color: #64748b; font-style: italic; margin-top: 0;"></p>
+                
+                <div id="previewLoader" class="loader" style="display:block;">TTS 발음 및 예비 데이터를 불러오는 중입니다...</div>
+                <audio id="previewAudio" controls style="display: none; margin: 10px auto;"></audio>
+
+                <hr style="margin: 20px 0; border-top: 1px dashed #cbd5e1;">
+                
+                <button id="recordBtn" class="record-btn" onclick="toggleRecording()" disabled>🎤 마이크 녹음 시작 (클릭)</button>
+                <div id="verifyLoader" class="loader">AI가 발음을 분석하고 일치 여부를 검증 중입니다...</div>
+                <div id="verifyResult" style="margin-top: 15px; font-weight: bold; font-size: 1.2em; min-height: 30px;"></div>
+            </div>
+
+            <button id="addDictVocabBtn" onclick="generateCards('dict')" style="margin-top: 15px; width: 100%; display: none;">🎉 검증 완료! 최종 단어장 카드로 추가하기</button>
             <div id="loaderDictGen" class="loader">LLM이 예문과 음성(TTS)을 생성 중입니다...</div>
         </div>
     </div>
@@ -117,14 +146,17 @@
 
     <script>
         let currentCandidates = {};
+        let currentPracticeWord = "";
+        
+        let mediaRecorder;
+        let audioChunks = [];
 
-        // 탭 전환 로직
         function switchTab(tabName) {
             document.getElementById('btnScan').classList.remove('active');
             document.getElementById('btnDict').classList.remove('active');
             document.getElementById('sectionScan').style.display = 'none';
             document.getElementById('sectionDict').style.display = 'none';
-            document.getElementById('step3').style.display = 'none'; // 결과창 숨김
+            document.getElementById('step3').style.display = 'none'; 
 
             if(tabName === 'scan') {
                 document.getElementById('btnScan').classList.add('active');
@@ -135,7 +167,6 @@
             }
         }
 
-        // [기능 1] 오디오 스캔
         async function uploadAudio() {
             const fileInput = document.getElementById('audioFile');
             if (!fileInput.files[0]) { alert("오디오 파일을 선택해주세요."); return; }
@@ -158,7 +189,7 @@
                 document.getElementById('rawExtractedWords').innerText = (data.extracted_words || []).join(", ") || "없음";
 
                 currentCandidates = data.candidates;
-                renderCandidateList('candidateList', currentCandidates);
+                renderCandidateList('candidateList', currentCandidates, 'checkbox');
 
                 document.getElementById('step2').style.display = 'block';
                 document.getElementById('step2').scrollIntoView({ behavior: 'smooth' });
@@ -170,30 +201,25 @@
             }
         }
 
-        // [기능 2] 다국어 사전 검색
         async function searchDict() {
             const query = document.getElementById('dictQuery').value.trim();
             const lang = document.getElementById('dictLang').value;
-            
             if (!query) { alert("검색할 단어를 입력하세요."); return; }
 
             document.getElementById('loaderDict').style.display = 'block';
             document.getElementById('searchBtn').disabled = true;
             document.getElementById('dictStep2').style.display = 'none';
+            document.getElementById('dictStep3').style.display = 'none';
             document.getElementById('step3').style.display = 'none';
 
             try {
                 const response = await fetch(`/api/dictionary/search?word=${encodeURIComponent(query)}&source_lang=${encodeURIComponent(lang)}`);
-                
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(errData.detail || "검색 실패");
-                }
+                if (!response.ok) throw new Error("검색 실패");
                 
                 const data = await response.json();
                 currentCandidates = data.candidates;
                 
-                renderCandidateList('dictCandidateList', currentCandidates);
+                renderCandidateList('dictCandidateList', currentCandidates, 'radio');
 
                 document.getElementById('dictStep2').style.display = 'block';
                 document.getElementById('dictStep2').scrollIntoView({ behavior: 'smooth' });
@@ -205,50 +231,171 @@
             }
         }
 
-        // UI에 후보군 렌더링
-        function renderCandidateList(containerId, candidates) {
+        function renderCandidateList(containerId, candidates, inputType) {
             const listDiv = document.getElementById(containerId);
             listDiv.innerHTML = '';
-            
             const entries = Object.entries(candidates);
+            
             if (entries.length === 0) {
                 listDiv.innerHTML = '<p style="color: #ef4444; font-size: 0.9em;">유효한 단어를 찾지 못했습니다.</p>';
-            } else {
-                for (const [word, info] of entries) {
-                    const div = document.createElement('div');
-                    div.className = 'word-item';
-                    div.innerHTML = `
-                        <label style="display: block; cursor: pointer;">
-                            <input type="checkbox" value="${word}" checked> 
-                            <strong>${word}</strong> <span style="color:#666; font-size:0.85em; margin-left: 5px;">[${info.pos}]</span>
-                            <div style="font-size: 0.85em; color: #475569; margin-top: 5px; padding-left: 20px;">
-                                ${info.definition}
-                            </div>
-                        </label>
-                    `;
-                    listDiv.appendChild(div);
-                }
+                return;
+            } 
+            
+            for (const [word, info] of entries) {
+                const div = document.createElement('div');
+                div.className = 'word-item';
+                div.innerHTML = `
+                    <label style="display: block; cursor: pointer;">
+                        <input type="${inputType}" name="candidateSelect" value="${word}" ${inputType === 'radio' ? '' : 'checked'}> 
+                        <strong>${word}</strong> <span style="color:#666; font-size:0.85em; margin-left: 5px;">[${info.pos}]</span>
+                        <div style="font-size: 0.85em; color: #475569; margin-top: 5px; padding-left: 20px;">
+                            ${info.definition}
+                        </div>
+                    </label>
+                `;
+                listDiv.appendChild(div);
+            }
+            if (inputType === 'radio') {
+                const firstRadio = listDiv.querySelector('input[type="radio"]');
+                if (firstRadio) firstRadio.checked = true;
             }
         }
 
-        // 공통: 단어장 생성 (테스트용이므로 인증이 필요 없는 /api/scan/generate 사용)
-        async function generateCards(sourceType) {
-            const containerId = sourceType === 'scan' ? 'candidateList' : 'dictCandidateList';
-            const checkboxes = document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`);
-            const selectedWords = {};
+        async function startPronunciationPractice() {
+            const selected = document.querySelector('#dictCandidateList input[type="radio"]:checked');
+            if (!selected) { alert("연습할 단어를 선택해주세요."); return; }
             
-            checkboxes.forEach(cb => { selectedWords[cb.value] = currentCandidates[cb.value]; });
+            currentPracticeWord = selected.value;
+            const info = currentCandidates[currentPracticeWord];
 
-            if (Object.keys(selectedWords).length === 0) { alert("단어를 하나 이상 선택해주세요."); return; }
-
-            const loaderId = sourceType === 'scan' ? 'loader2' : 'loaderDictGen';
-            const btnId = sourceType === 'scan' ? 'generateBtn' : 'generateDictBtn';
+            document.getElementById('dictStep2').style.display = 'none';
+            document.getElementById('dictStep3').style.display = 'block';
             
-            document.getElementById(loaderId).style.display = 'block';
-            document.getElementById(btnId).disabled = true;
+            document.getElementById('previewWord').innerText = currentPracticeWord;
+            document.getElementById('previewDef').innerText = info.definition;
+            document.getElementById('previewPronunciation').innerText = "";
+            document.getElementById('previewDefEng').innerText = "";
+            document.getElementById('verifyResult').innerText = "";
+            document.getElementById('addDictVocabBtn').style.display = 'none';
+            document.getElementById('addDictVocabBtn').innerText = "검증 완료 - 최종 단어장 카드로 추가하기";
+            
+            document.getElementById('previewLoader').style.display = 'block';
+            document.getElementById('previewAudio').style.display = 'none';
+            document.getElementById('recordBtn').disabled = true;
 
             try {
-                // 테스트 UI이므로 DB 저장을 건너뛰고 Pipeline 생성 로직만 확인하는 엔드포인트 호출
+                const res = await fetch('/api/dictionary/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        word: currentPracticeWord, 
+                        definition: info.definition, 
+                        pos: info.pos 
+                    })
+                });
+                if(!res.ok) throw new Error("프리뷰 로드 실패");
+                const data = await res.json();
+                
+                document.getElementById('previewPronunciation').innerText = `[ ${data.pronunciation} ]`;
+                document.getElementById('previewDefEng').innerText = data.definition_english;
+                
+                const audioEl = document.getElementById('previewAudio');
+                audioEl.src = "/" + data.audio_path;
+                audioEl.style.display = 'block';
+                
+                document.getElementById('recordBtn').disabled = false;
+            } catch(e) {
+                console.error(e);
+                alert("단어 프리뷰 생성 중 오류 발생: " + e.message);
+            } finally {
+                document.getElementById('previewLoader').style.display = 'none';
+            }
+        }
+
+        async function toggleRecording() {
+            const recordBtn = document.getElementById('recordBtn');
+
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                recordBtn.innerText = "🎤 마이크 녹음 (재도전 시 클릭)";
+                recordBtn.classList.remove('recording');
+                recordBtn.style.backgroundColor = "#10b981";
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                audioChunks = [];
+                
+                mediaRecorder.addEventListener("dataavailable", event => {
+                    audioChunks.push(event.data);
+                });
+                
+                mediaRecorder.addEventListener("stop", async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    await verifyPronunciation(audioBlob);
+                });
+
+                recordBtn.innerText = "🛑 녹음 중... (완료 시 클릭)";
+                recordBtn.classList.add('recording');
+            } catch(e) {
+                alert("마이크 접근 권한을 허용해주세요.");
+            }
+        }
+
+        async function verifyPronunciation(audioBlob) {
+            document.getElementById('verifyLoader').style.display = 'block';
+            document.getElementById('verifyResult').innerText = "";
+            document.getElementById('addDictVocabBtn').style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'record.wav');
+            formData.append('target_word', currentPracticeWord);
+
+            try {
+                const res = await fetch('/api/dictionary/verify', { method: 'POST', body: formData });
+                if(!res.ok) throw new Error("검증 서버 오류");
+                const data = await res.json();
+                
+                if (data.is_match) {
+                    document.getElementById('verifyResult').innerHTML = `✅ AI가 "${currentPracticeWord}"(으)로 인식했습니다.`;
+                    document.getElementById('verifyResult').style.color = "#10b981";
+                    document.getElementById('addDictVocabBtn').style.display = "block";
+                } else {
+                    document.getElementById('verifyResult').innerHTML = `❌ 인식 실패. <br><span style="font-size:0.8em; color:#64748b;">(AI가 인식한 소리: "${data.spoken_corrected}")</span><br>다시 녹음 버튼을 눌러 정확히 발음해보세요.`;
+                    document.getElementById('verifyResult').style.color = "#ef4444";
+                }
+            } catch(e) {
+                alert("검증 에러: " + e.message);
+            } finally {
+                document.getElementById('verifyLoader').style.display = 'none';
+            }
+        }
+
+        // 핵심 수정: API 응답 포맷에 유연하게 대응하며 검증 UI를 숨기지 않음
+        async function generateCards(sourceType) {
+            const selectedWords = {};
+            let loaderId, btnId;
+
+            if (sourceType === 'scan') {
+                const checkboxes = document.querySelectorAll('#candidateList input[type="checkbox"]:checked');
+                checkboxes.forEach(cb => { selectedWords[cb.value] = currentCandidates[cb.value]; });
+                if (Object.keys(selectedWords).length === 0) { alert("단어를 하나 이상 선택해주세요."); return; }
+                loaderId = 'loader2';
+                btnId = 'generateBtn';
+            } else if (sourceType === 'dict') {
+                selectedWords[currentPracticeWord] = currentCandidates[currentPracticeWord];
+                loaderId = 'loaderDictGen';
+                btnId = 'addDictVocabBtn';
+                // 💡 더 이상 dictStep3(검증 화면)을 숨기지 않습니다!
+            }
+
+            document.getElementById(loaderId).style.display = 'block';
+            if (document.getElementById(btnId)) document.getElementById(btnId).disabled = true;
+
+            try {
                 const response = await fetch('/api/scan/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -257,20 +404,28 @@
 
                 const data = await response.json();
                 
-                // 포인트 관련 경고 문구 설정
+                let cardsList = [];
+                if (Array.isArray(data)) {
+                    cardsList = data;
+                } else if (data.cards) {
+                    cardsList = data.cards;
+                } else if (data.new_word_cards) {
+                    cardsList = data.new_word_cards;
+                }
+                
                 const warningP = document.getElementById('pointWarning');
                 if(sourceType === 'scan') {
-                    warningP.innerHTML = "💡 스캔 모드: 이미 단어장에 있는 단어라면 <strong>리스닝 포인트(Scan Count)</strong>가 증가합니다.";
+                    warningP.innerHTML = "스캔 모드: 이미 단어장에 있는 단어라면 <strong>리스닝 포인트(Scan Count)</strong>가 증가합니다.";
                     warningP.style.color = "#4f46e5";
                 } else {
-                    warningP.innerHTML = "🚨 사전 모드: 이미 단어장에 있는 단어라도 <strong>포인트가 증가하지 않습니다.</strong>";
-                    warningP.style.color = "#f43f5e";
+                    warningP.innerHTML = "사전 연습 모드: 스스로 발음 검증을 마친 단어가 단어장에 추가되었습니다!";
+                    warningP.style.color = "#10b981";
                 }
 
                 const resultDiv = document.getElementById('resultCards');
                 resultDiv.innerHTML = '';
 
-                data.cards.forEach(card => {
+                cardsList.forEach(card => {
                     let examplesHtml = card.examples.map((ex, idx) => `
                         <div style="margin-top: 12px; font-size: 0.9em; background: #f1f5f9; padding: 10px; border-radius: 5px;">
                             <p style="margin: 0; font-weight: 500;">🇰🇷 ${ex.korean}</p>
@@ -296,11 +451,19 @@
 
                 document.getElementById('step3').style.display = 'block';
                 document.getElementById('step3').scrollIntoView({ behavior: 'smooth' });
+                
+                // 단어 추가 완료 시 버튼의 텍스트 변경
+                if (sourceType === 'dict' && document.getElementById(btnId)) {
+                    document.getElementById(btnId).innerText = "하단에 단어장 카드가 생성되었습니다!";
+                }
+
             } catch (err) {
                 alert("생성 오류: " + err);
             } finally {
                 document.getElementById(loaderId).style.display = 'none';
-                document.getElementById(btnId).disabled = false;
+                if (document.getElementById(btnId) && sourceType === 'scan') {
+                    document.getElementById(btnId).disabled = false;
+                }
             }
         }
     </script>

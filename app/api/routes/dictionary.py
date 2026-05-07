@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Dict, Any
@@ -18,10 +18,20 @@ nlp_pipeline = KoreanLearningPipeline(
     model_name=settings.LLM_MODEL_NAME
 )
 
+# ==========================================
+# Pydantic Schemas
+# ==========================================
 class DictProcessRequest(BaseModel):
     extracted_words: Dict[str, Any]
 
+class PreviewRequest(BaseModel):
+    word: str
+    definition: str
+    pos: str
 
+# ==========================================
+# Routes
+# ==========================================
 @router.get("/search")
 async def search_dictionary(
     word: str = Query(..., min_length=1, description="검색할 외국어 단어 (예: apple, яблоко)"),
@@ -47,6 +57,45 @@ async def search_dictionary(
     }
 
 
+@router.post("/preview")
+async def get_word_preview(req: PreviewRequest):
+    """
+    사전 검색 후 단어장 추가 전, 뜻과 발음(TTS)만 임시로 생성하여 반환
+    """
+    # 프론트에서 즉각적으로 재생할 수 있도록 임시 폴더에 TTS 생성
+    output_dir = "static/tts/temp"
+    result = await nlp_pipeline.generate_word_preview(
+        word=req.word, 
+        definition=req.definition, 
+        pos=req.pos, 
+        output_dir=output_dir
+    )
+    return result
+
+
+@router.post("/verify")
+async def verify_pronunciation(
+    file: UploadFile = File(...),
+    target_word: str = Form(...)
+):
+    """
+    사용자 녹음 파일 수신 후 타겟 단어와 발음 일치 여부 검증
+    """
+    if not file.filename.lower().endswith((".wav", ".mp3", ".m4a", ".ogg")):
+        raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다.")
+
+    audio_bytes = await file.read()
+    
+    result = await nlp_pipeline.verify_spoken_word(
+        audio_bytes=audio_bytes,
+        ffmpeg_bin=settings.FFMPEG_BIN,
+        whisper_model_size=settings.WHISPER_MODEL,
+        target_word=target_word
+    )
+    
+    return result
+
+
 @router.post("/process")
 async def process_dictionary_words(
     req: DictProcessRequest,
@@ -55,7 +104,7 @@ async def process_dictionary_words(
 ):
     """
     [Phase 2] 사전 검색을 통해 선택된 단어를 단어장 카드로 생성
-    🚨 학습 스캔(scan_count) 포인트는 올리지 않음.
+    학습 스캔(scan_count) 포인트는 올리지 않음.
     """
     # 유저의 기존 단어장 조회
     user_words = db.query(WordCard).filter(WordCard.user_id == current_user.id).all()
@@ -66,8 +115,7 @@ async def process_dictionary_words(
 
     for korean_word, info in req.extracted_words.items():
         if korean_word in word_map:
-            # 💡 [핵심 차이점] 이미 단어장에 있는 경우:
-            # db.add(ScanRecord(...)) 를 생략하고 scan_count도 건드리지 않습니다.
+            # 이미 단어장에 있는 경우 포인트(scan_count) 증가 없이 상태만 반환
             already_exists.append({
                 "word_card_id": word_map[korean_word].id, 
                 "korean_word": korean_word, 
