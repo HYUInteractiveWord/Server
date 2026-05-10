@@ -6,6 +6,8 @@ from typing import Optional
 class WordCardCreate(BaseModel):
     korean_word: str
     source: str = "dictionary"  # "scan" | "dictionary"
+    pos: Optional[str] = None
+    definition: Optional[str] = None
 
 
 class WordCardResponse(BaseModel):
