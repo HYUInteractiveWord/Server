@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.word_card import WordCard
 from app.services.pipeline import KoreanLearningPipeline
 from app.core.config import settings
+from app.services.dictionary import fetch_word_info
 
 router = APIRouter(prefix="/dictionary", tags=["dictionary"])
 
@@ -34,26 +35,41 @@ class PreviewRequest(BaseModel):
 # ==========================================
 @router.get("/search")
 async def search_dictionary(
-    word: str = Query(..., min_length=1, description="검색할 외국어 단어 (예: apple, яблоко)"),
-    source_lang: str = Query("영어 또는 러시아어", description="입력 언어 지정")
+    word: str = Query(..., min_length=1, description="검색할 단어"),
+    source_lang: str = Query("한국어", description="입력 언어 지정"),
 ):
     """
-    [Phase 1] 외국어 검색어 -> 한국어 의미 매칭 및 기초사전 검증
+    통합 사전 검색 API.
+
+    - 프론트 단어 검색용: word, pos, definition 반환
+    - 기존 파이프라인용: search_query, candidates 유지
     """
     word = word.strip()
     if not word:
         raise HTTPException(status_code=400, detail="검색어를 입력해주세요.")
 
-    # 1. 파이프라인의 사전 검색 모듈 호출
-    candidates = await nlp_pipeline.search_dictionary_candidates(query=word, source_lang=source_lang)
-    
-    if not candidates:
-        raise HTTPException(status_code=404, detail="해당하는 한국어 단어를 찾을 수 없거나 기초사전에 없습니다.")
+    # 1. 한국어 단어 정보 조회
+    word_info = fetch_word_info(word)
 
-    # 기존 응답 포맷을 유지하면서 후보군 전체를 반환
+    # 2. 기존 후보 검색 기능도 유지
+    candidates = []
+    try:
+        candidates = await nlp_pipeline.search_dictionary_candidates(
+            query=word,
+            source_lang=source_lang,
+        )
+    except Exception as e:
+        print(f"[Dict Search] candidate search failed: {e}")
+
     return {
+        # 프론트용 필드
+        "word": word,
+        "pos": word_info.get("pos"),
+        "definition": word_info.get("definition"),
+
+        # 기존 기능 유지용 필드
         "search_query": word,
-        "candidates": candidates
+        "candidates": candidates,
     }
 
 
