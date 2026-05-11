@@ -12,6 +12,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 INITIAL_DAILY_MISSIONS = [
     {"mission_type": "daily_pronunciation", "target": 3, "xp_reward": 150},
     {"mission_type": "daily_scan", "target": 5, "xp_reward": 150},
+    {"mission_type": "daily_word_quiz", "target": 1, "xp_reward": 150},
+    {"mission_type": "daily_collect_noun", "target": 1, "xp_reward": 100},
 ]
 
 

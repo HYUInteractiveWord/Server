@@ -14,27 +14,42 @@ router = APIRouter(prefix="/missions", tags=["missions"])
 DAILY_MISSION_TEMPLATES = [
     {"mission_type": "daily_pronunciation", "target": 3, "xp_reward": 150},
     {"mission_type": "daily_scan", "target": 5, "xp_reward": 150},
+    {"mission_type": "daily_word_quiz", "target": 1, "xp_reward": 150},
+    {"mission_type": "daily_collect_noun", "target": 1, "xp_reward": 100},
 ]
 
 
 def _get_or_create_daily_missions(user_id: int, db: Session) -> list[Mission]:
     today = date.today()
+    mission_types = [t["mission_type"] for t in DAILY_MISSION_TEMPLATES]
+
     existing = db.query(Mission).filter(
         Mission.user_id == user_id,
-        Mission.mission_type.in_(["daily_pronunciation", "daily_scan"]),
+        Mission.mission_type.in_(mission_types),
         func.date(Mission.created_at) == today,
     ).all()
 
-    if existing:
-        return existing
+    existing_by_type = {m.mission_type: m for m in existing}
+    missions = list(existing)
 
-    missions = [Mission(user_id=user_id, **t) for t in DAILY_MISSION_TEMPLATES]
-    for m in missions:
-        db.add(m)
+    for template in DAILY_MISSION_TEMPLATES:
+        mission_type = template["mission_type"]
+        if mission_type not in existing_by_type:
+            mission = Mission(user_id=user_id, **template)
+            db.add(mission)
+            missions.append(mission)
+
     db.commit()
-    for m in missions:
-        db.refresh(m)
-    return missions
+
+    for mission in missions:
+        db.refresh(mission)
+
+    return sorted(
+        missions,
+        key=lambda m: mission_types.index(m.mission_type)
+        if m.mission_type in mission_types
+        else 999,
+    )
 
 
 @router.get("/", response_model=list[MissionResponse])
