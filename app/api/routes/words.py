@@ -1,18 +1,129 @@
+from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.db import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.word_card import WordCard
+from app.models.mission import Mission
 from app.schemas.word_card import WordCardCreate, WordCardResponse
 from app.services.dictionary import fetch_word_info
 from app.services.tts import generate_tts
 from app.services.pipeline import KoreanLearningPipeline
 from app.core.config import settings
+from app.services.gamification import get_rank_for_xp, RANK_WORD_SLOTS
 
 
 router = APIRouter(prefix="/words", tags=["words"])
+
+QUIZ_MISSION_TYPE = "daily_word_quiz"
+COLLECT_NOUN_MISSION_TYPE = "daily_collect_noun"
+
+DAILY_MISSION_FALLBACKS = {
+    QUIZ_MISSION_TYPE: {"target": 1, "xp_reward": 150},
+    COLLECT_NOUN_MISSION_TYPE: {"target": 1, "xp_reward": 100},
+}
+
+
+class WordQuizItemResult(BaseModel):
+    word_id: int
+    is_correct: bool
+
+
+class WordQuizResultRequest(BaseModel):
+    quiz_type: str = "meaning"
+    results: list[WordQuizItemResult]
+
+
+def _effect_level_from_point(point: int) -> int:
+    point = max(0, min(100, point))
+    if point >= 100:
+        return 4
+    if point >= 76:
+        return 3
+    if point >= 51:
+        return 2
+    if point >= 26:
+        return 1
+    return 0
+
+
+def _is_noun_pos(pos: str | None) -> bool:
+    if not pos:
+        return False
+    normalized = pos.strip().lower()
+    return "명사" in normalized or normalized == "noun"
+
+
+def _refresh_user_rank_and_slots(user: User) -> None:
+    new_rank = get_rank_for_xp(user.xp)
+    if new_rank != user.rank:
+        user.rank = new_rank
+        user.max_word_slots = RANK_WORD_SLOTS[new_rank]
+
+
+def _increase_daily_mission_progress(
+    db: Session,
+    user_id: int,
+    mission_type: str,
+    amount: int = 1,
+) -> Mission | None:
+    today = date.today()
+
+    mission = db.query(Mission).filter(
+        Mission.user_id == user_id,
+        Mission.mission_type == mission_type,
+        func.date(Mission.created_at) == today,
+    ).first()
+
+    if mission is None:
+        fallback = DAILY_MISSION_FALLBACKS.get(mission_type)
+        if fallback is None:
+            return None
+
+        mission = Mission(
+            user_id=user_id,
+            mission_type=mission_type,
+            target=fallback["target"],
+            xp_reward=fallback["xp_reward"],
+        )
+        db.add(mission)
+        db.flush()
+
+    if not mission.is_completed:
+        mission.progress = min(
+            mission.target,
+            (mission.progress or 0) + max(0, amount),
+        )
+
+    return mission
+
+
+def _complete_mission_if_ready(mission: Mission | None, user: User) -> int:
+    if mission is None:
+        return 0
+
+    if mission.is_completed:
+        return 0
+
+    if (mission.progress or 0) < mission.target:
+        return 0
+
+    mission.is_completed = True
+
+    if hasattr(mission, "completed_at"):
+        mission.completed_at = datetime.utcnow()
+
+    reward = mission.xp_reward or 0
+    if reward > 0:
+        user.xp += reward
+        _refresh_user_rank_and_slots(user)
+
+    return reward
+
 
 nlp_pipeline = KoreanLearningPipeline(
     term_api_key=settings.TERM_API_KEY,
@@ -136,9 +247,120 @@ async def create_word_card(
         )
 
     db.add(card)
+
+    if _is_noun_pos(card.pos):
+        mission = _increase_daily_mission_progress(
+            db=db,
+            user_id=current_user.id,
+            mission_type=COLLECT_NOUN_MISSION_TYPE,
+            amount=1,
+        )
+        _complete_mission_if_ready(mission, current_user)
+
     db.commit()
     db.refresh(card)
     return card
+
+
+
+
+@router.post("/quiz-result")
+def submit_word_quiz_result(
+    body: WordQuizResultRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    단어 테스트 결과를 반영한다.
+
+    - 정답 1개당 user.xp +10
+    - word_point/effect_level은 아직 변경하지 않음
+    - 테스트 1회 제출 시 daily_word_quiz 미션 progress +1
+    - 미션 보상 XP는 기존 /missions/{mission_id}/complete에서 별도 지급
+    """
+    if not body.results:
+        raise HTTPException(status_code=400, detail="Quiz result is empty")
+
+    seen_word_ids: set[int] = set()
+    checked_words = []
+    correct_count = 0
+    valid_count = 0
+
+    for result in body.results:
+        if result.word_id in seen_word_ids:
+            continue
+
+        seen_word_ids.add(result.word_id)
+
+        card = db.query(WordCard).filter(
+            WordCard.id == result.word_id,
+            WordCard.user_id == current_user.id,
+        ).first()
+
+        if card is None:
+            continue
+
+        valid_count += 1
+
+        if result.is_correct:
+            correct_count += 1
+
+        checked_words.append(
+            {
+                "id": card.id,
+                "korean_word": card.korean_word,
+                "is_correct": result.is_correct,
+                "word_point": card.word_point or 0,
+                "effect_level": card.effect_level or 0,
+            }
+        )
+
+    if valid_count == 0:
+        raise HTTPException(status_code=400, detail="No valid word cards in result")
+
+    perfect_bonus = 10 if valid_count >= 3 and correct_count == valid_count else 0
+    quiz_score = correct_count * 10 + perfect_bonus
+
+    # 현재 정책: 퀴즈 정답은 단어별 word_point가 아니라 유저 전체 XP에만 반영
+    quiz_xp_gained = correct_count * 10
+    current_user.xp += quiz_xp_gained
+    _refresh_user_rank_and_slots(current_user)
+
+    mission = _increase_daily_mission_progress(
+        db=db,
+        user_id=current_user.id,
+        mission_type=QUIZ_MISSION_TYPE,
+        amount=1,
+    )
+
+    mission_xp_gained = _complete_mission_if_ready(mission, current_user)
+
+    db.commit()
+
+    return {
+        "quiz_type": body.quiz_type,
+        "total": valid_count,
+        "correct": correct_count,
+        "score": quiz_score,
+        "perfect_bonus": perfect_bonus,
+        "quiz_xp_gained": quiz_xp_gained,
+        "mission_xp_gained": mission_xp_gained,
+        "total_xp_gained": quiz_xp_gained + mission_xp_gained,
+        "user": {
+            "xp": current_user.xp,
+            "rank": current_user.rank,
+            "max_word_slots": current_user.max_word_slots,
+        },
+        "checked_words": checked_words,
+        "mission": {
+            "mission_type": mission.mission_type,
+            "progress": mission.progress,
+            "target": mission.target,
+            "is_completed": mission.is_completed,
+            "xp_reward": mission.xp_reward,
+        } if mission else None,
+    }
+
 
 
 @router.get("/{word_id}", response_model=WordCardResponse)
