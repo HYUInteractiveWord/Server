@@ -27,13 +27,17 @@ nlp_pipeline = KoreanLearningPipeline(
 # [프론트엔드 HTML 테스트용 API] 
 class GenerateRequest(BaseModel):
     selected_words: Dict[str, Any]
+    target_language: str = "ru"
 
 @router.post("/generate")
 async def generate_cards_for_test(req: GenerateRequest):
-    """Phase 2: 선택된 단어 기반 학습 카드 및 TTS 생성 (HTML 테스트 전용)"""
     try:
         output_dir = "static/tts/test_user"
-        final_cards = await nlp_pipeline.phase2_generate(req.selected_words, output_dir)
+        final_cards = await nlp_pipeline.phase2_generate(
+            selected_words=req.selected_words, 
+            output_dir=output_dir,
+            target_language=req.target_language 
+        )
         return {"status": "success", "cards": final_cards}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -77,7 +81,8 @@ async def process_scan_result(
         user_output_dir = f"static/tts/user_{current_user.id}"
         generated_cards = await nlp_pipeline.phase2_generate(
             selected_words=new_candidates_for_generation,
-            output_dir=user_output_dir
+            output_dir=user_output_dir,
+            target_language=body.target_language
         )
         
         # 새롭게 생성된 단어 카드를 WordCard DB에 등록

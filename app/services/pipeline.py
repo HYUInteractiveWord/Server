@@ -82,6 +82,14 @@ class KoreanLearningPipeline:
         text = re.sub(r'<[^>]+>', '', text)
         return text.strip()
 
+    def _get_lang_str(self, target_language: str) -> str:
+        """언어 코드를 LLM 프롬프트용 지시어로 변환"""
+        lang_map = {
+            "en": "English",
+            "ru": "Russian (русский язык)"
+        }
+        return lang_map.get(target_language.lower(), "English (영어)")
+
     async def correct_stt_text(self, text: str) -> str:
         """1. STT 텍스트 후보정 (비동기 처리)"""
         prompt = PromptTemplate.from_template(
@@ -121,7 +129,11 @@ class KoreanLearningPipeline:
             response = await chain.ainvoke({"text": text})
             llm_raw_output = response.content.strip() 
             
-            cleaned_output = re.sub(r'```json\n?|```', '', llm_raw_output).strip()
+            cleaned_output = re.sub(
+    r'```json\n?|```', 
+    '', 
+    llm_raw_output
+    ).strip()
             
             try:
                 extracted_words = json.loads(cleaned_output)
@@ -194,7 +206,6 @@ class KoreanLearningPipeline:
         valid_candidates = {}
         unique_words = list(set(extracted_words))
         
-        # 순차 처리 방식으로 변경
         for word in unique_words:
             dict_info = await self.fetch_basic_dict_data(word)
             
@@ -203,7 +214,6 @@ class KoreanLearningPipeline:
                 if not valid_senses:
                     continue
                 
-                # 다의어일 경우만 LLM 문맥 분석 실행
                 if len(valid_senses) > 1:
                     best_sense = await self.select_best_definition(word, valid_senses, context_text)
                 else:
@@ -211,7 +221,6 @@ class KoreanLearningPipeline:
                     
                 valid_candidates[word] = best_sense
                 
-            # 공공 API Rate Limit(429) 방지를 위한 짧은 대기
             await asyncio.sleep(0.2)
             
         return valid_candidates
@@ -230,7 +239,7 @@ class KoreanLearningPipeline:
         }
         
         def _sync_request():
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            headers = {'User-Agent': 'Mozilla/5.0'}
             response = requests.get(url, params=params, headers=headers, timeout=10, verify=False)
             response.raise_for_status()
             return response.json()
@@ -248,10 +257,8 @@ class KoreanLearningPipeline:
                     result_list = return_objects[0].get("resultlist", [])
                     if result_list:
                         
-                        # [핵심 로직] 타겟 뜻이 주어졌고, 온용어 결과가 여러 개인 경우 LLM으로 뜻 비교
                         if target_definition and len(result_list) > 1:
                             candidates_str = ""
-                            
                             for i, item in enumerate(result_list):
                                 cat_main = item.get("category_main", "")
                                 cat_sub = item.get("category_sub", "")
@@ -288,21 +295,39 @@ class KoreanLearningPipeline:
             print(f"  ❌ 온용어 검색 오류: {e}", flush=True)
             return ""
 
-    async def process_with_llm(self, word_raw: str, definition: str, pos: str) -> dict:
-        """LLM 번역 및 예문 생성 (비동기 처리)"""
+    async def process_with_llm(self, word_raw: str, definition: str, pos: str, target_language: str = "en") -> dict:
+        """LLM 번역 및 예문 생성 (다국어 지원)"""
+        target_lang_str = self._get_lang_str(target_language)
+        
         prompt = PromptTemplate.from_template(
-            "[단어]: {word_raw} ({pos})\n[정의]: {definition}\n\n"
+            "[단어]: {word_raw} ({pos})\n"
+            "[정의]: {definition}\n"
+            "[목표 언어]: {target_lang_str}\n\n"
             "위 데이터를 바탕으로 다음 JSON을 생성하세요:\n"
-            "1. english_definition (정의 번역)\n"
-            "2. easy_examples (초급용 짧은 예문 2개 배열, 각 객체는 korean과 english 포함)\n"
-            "3. romanization (로마자 발음)"
+            "1. translated_definition ('사전적 정의'를 [목표 언어]로 번역 또는 쉽게 설명)\n"
+            "2. easy_examples (초급 한국어 학습자를 위한 아주 쉽고 짧은 예문 2개. 각 객체는 한국어 원문(korean)과 [목표 언어] 번역(translation) 포함)\n"
+            "3. romanization (단어의 로마자 발음 표기)\n\n"
+            "반드시 다음 JSON 형식으로 응답하세요:\n"
+            "{{\n"
+            '  "translated_definition": "...",\n'
+            '  "easy_examples": [\n'
+            '    {{"korean": "한국어 예문 1", "translation": "번역 1"}},\n'
+            '    {{"korean": "한국어 예문 2", "translation": "번역 2"}}\n'
+            '  ],\n'
+            '  "romanization": "..."\n'
+            "}}"
         )
         chain = prompt | self.llm | self.json_parser
         try:
-            return await chain.ainvoke({"word_raw": word_raw, "definition": definition, "pos": pos})
+            return await chain.ainvoke({
+                "word_raw": word_raw, 
+                "definition": definition, 
+                "pos": pos,
+                "target_lang_str": target_lang_str
+            })
         except Exception as e:
             print(f"  [Error] process_with_llm failed: {e}", flush=True)
-            return {"english_definition": "", "easy_examples": [], "romanization": ""}
+            return {"translated_definition": "", "easy_examples": [], "romanization": ""}
 
     async def generate_tts(self, text: str, output_path: str):
         if not text: return
@@ -313,16 +338,13 @@ class KoreanLearningPipeline:
         """Phase 1: 텍스트 수신 -> 후보정 -> 단어 추출 -> 검증 -> 후보군 반환"""
         t_start = time.time()
         
-        # 1. STT 교정
         corrected_text = await self.correct_stt_text(raw_stt_text)
         print(f"  [Log] STT Correction Time: {time.time() - t_start:.2f}s", flush=True)
         
-        # 2. 단어 추출
         t_step = time.time()
         extracted_words, llm_raw_output = await self.extract_core_vocabulary(corrected_text)
         print(f"  [Log] Vocab Extraction Time: {time.time() - t_step:.2f}s", flush=True)
         
-        # 3. 사전 필터링 (순차 처리)
         t_step = time.time()
         valid_candidates = await self.filter_with_dict(extracted_words, corrected_text)
         print(f"  [Log] Dict Filtering Time: {time.time() - t_step:.2f}s", flush=True)
@@ -337,12 +359,9 @@ class KoreanLearningPipeline:
         }
 
     async def search_dictionary_candidates(self, query: str, source_lang: str = "러시아어 또는 영어") -> dict:
-        """
-        사전 검색: 외국어 -> 한국어 단어 후보 추출 및 사전 검증
-        """
+        """사전 검색: 외국어 -> 한국어 단어 후보 추출 및 사전 검증"""
         print(f"\n[Dict Search] '{query}' ({source_lang}) 한국어 단어 매칭 중...", flush=True)
         
-        # 1. LLM을 이용해 입력된 외국어에 가장 잘 맞는 한국어 기초 어휘 추출
         prompt = PromptTemplate.from_template(
             "당신은 한국어 교육 전문가입니다. 학습자가 입력한 {source_lang} 단어/문장 '{query}'에 해당하는 "
             "가장 자연스러운 한국어 기초 어휘(명사, 동사/형용사는 반드시 사전형) 1~3개를 추천해주세요.\n\n"
@@ -361,7 +380,6 @@ class KoreanLearningPipeline:
             except Exception:
                 extracted_words = re.findall(r'[가-힣]+', cleaned_output)
                 
-            # 2. 추출된 한국어 단어들을 기존 기초사전 API로 검증
             context_text = f"이 단어는 {source_lang} '{query}'의 의미를 가집니다."
             valid_candidates = await self.filter_with_dict(extracted_words, context_text)
             
@@ -372,52 +390,53 @@ class KoreanLearningPipeline:
             print(f"  사전검색 failed: {e}", flush=True)
             return {}
 
-    # ==========================================
-    # [신규 기능 1] 단어 학습 임시 프리뷰 생성
-    # ==========================================
-    async def generate_word_preview(self, word: str, definition: str, pos: str, output_dir: str) -> dict:
-        """사전에서 선택한 단어의 임시 프리뷰 생성 (발음기호, 영어 번역, 단어 음성만 빠르게 생성)"""
+    async def generate_word_preview(self, word: str, definition: str, pos: str, output_dir: str, target_language: str = "en") -> dict:
+        """사전에서 선택한 단어의 임시 프리뷰 생성 (발음기호, 번역, 단어 음성만 빠르게 생성)"""
         os.makedirs(output_dir, exist_ok=True)
         print(f"\n[Preview] '{word}' 임시 확인용 데이터 생성 중...", flush=True)
         
+        target_lang_str = self._get_lang_str(target_language)
+
         prompt = PromptTemplate.from_template(
             "당신은 한국어 교육 전문가입니다.\n"
-            "[단어]: {word}\n[품사]: {pos}\n[정의]: {definition}\n\n"
+            "[단어]: {word}\n[품사]: {pos}\n[정의]: {definition}\n[목표 언어]: {target_lang_str}\n\n"
             "이 단어에 대해 아래 JSON을 생성하세요:\n"
-            "1. english_definition (정의의 영어 번역)\n"
+            "1. translated_definition (정의를 '목표 언어'로 번역 또는 쉽게 설명)\n"
             "2. romanization (단어의 로마자 발음 표기)\n"
             "{{\n"
-            '  "english_definition": "...",\n'
+            '  "translated_definition": "...",\n'
             '  "romanization": "..."\n'
             "}}"
         )
         chain = prompt | self.llm | self.json_parser
         try:
-            llm_result = await chain.ainvoke({"word": word, "definition": definition, "pos": pos})
+            llm_result = await chain.ainvoke({
+                "word": word, 
+                "definition": definition, 
+                "pos": pos,
+                "target_lang_str": target_lang_str
+            })
         except Exception as e:
             print(f"  [Error] Preview LLM failed: {e}", flush=True)
-            llm_result = {"english_definition": "", "romanization": ""}
+            llm_result = {"translated_definition": "", "romanization": ""}
             
-        # 단어 TTS만 임시로 생성
         word_audio_path = os.path.join(output_dir, f"temp_{word}_word.mp3")
         await self.generate_tts(word, word_audio_path)
         
         return {
             "word": word,
+            "target_language": target_language,
             "pos_type": pos,
             "definition_korean": definition,
-            "definition_english": llm_result.get("english_definition", ""),
+            "definition_translated": llm_result.get("translated_definition", ""),
             "pronunciation": llm_result.get("romanization", ""),
             "audio_path": word_audio_path
         }
-
-    # 발음 검증 기능
 
     async def verify_spoken_word(self, audio_bytes: bytes, ffmpeg_bin: str, whisper_model_size: str, target_word: str) -> dict:
         """사용자가 녹음한 음성을 분석하여 타겟 단어와 일치하는지 검증"""
         print(f"\n[Verification] '{target_word}' 음성 검증 시작...", flush=True)
         
-        # 1. 오디오에서 텍스트 추출 (Demucs + Whisper 동기 함수이므로 쓰레드에서 실행)
         try:
             raw_text = await asyncio.to_thread(
                 extract_text_from_audio, audio_bytes, ffmpeg_bin, whisper_model_size
@@ -427,11 +446,9 @@ class KoreanLearningPipeline:
             print(f"  ❌ STT 추출 실패: {e}", flush=True)
             return {"is_match": False, "target_word": target_word, "spoken_raw": "", "spoken_corrected": ""}
 
-        # 2. LLM을 통한 STT 오탈자 보정
         corrected_text = await self.correct_stt_text(raw_text)
         print(f"  -> LLM 보정문: {corrected_text}", flush=True)
         
-        # 3. 매칭 판별
         clean_target = re.sub(r'[^가-힣a-zA-Z0-9]', '', target_word)
         clean_spoken = re.sub(r'[^가-힣a-zA-Z0-9]', '', corrected_text)
         
@@ -449,8 +466,8 @@ class KoreanLearningPipeline:
             "spoken_corrected": corrected_text
         }
 
-    async def phase2_generate(self, selected_words: dict, output_dir: str) -> list:
-        """Phase 2: 선택된 단어 딕셔너리 수신 -> LLM 예문 -> TTS 생성 -> 파일 저장"""
+    async def phase2_generate(self, selected_words: dict, output_dir: str, target_language: str = "en") -> list:
+        """Phase 2: 선택된 단어 딕셔너리 수신 -> LLM 다국어 처리 -> TTS 생성 -> 파일 저장"""
         os.makedirs(output_dir, exist_ok=True)
         final_cards = []
         t_start = time.time()
@@ -461,15 +478,13 @@ class KoreanLearningPipeline:
 
             semantic_category = await self.fetch_on_term_category(word, info["definition"])
             
-            # 공공 API Rate Limit(429) 방지를 위한 짧은 대기
             await asyncio.sleep(0.2)
             
-            llm_result = await self.process_with_llm(word, info["definition"], info["pos"])
+            llm_result = await self.process_with_llm(word, info["definition"], info["pos"], target_language)
             
-            all_examples = [{"type": "llm_generated", "korean": ex.get("korean", ""), "english": ex.get("english", "")} 
+            all_examples = [{"type": "llm_generated", "korean": ex.get("korean", ""), "translation": ex.get("translation", "")} 
                             for ex in llm_result.get("easy_examples", [])]
             
-            # TTS 오디오 파일 생성 및 저장
             word_audio_path = os.path.join(word_dir, f"{word}_word.mp3")
             await self.generate_tts(word, word_audio_path)
             
@@ -479,25 +494,23 @@ class KoreanLearningPipeline:
                 await self.generate_tts(ex_obj["korean"], ex_audio_path)
                 example_audio_paths.append(ex_audio_path)
 
-            # JSON 데이터 구조화
             word_card = {
                 "word": word,
+                "target_language": target_language,
                 "pronunciation": llm_result.get("romanization", ""),
                 "pos_type": info["pos"], 
                 "semantic_category": semantic_category,
                 "definition_korean": info["definition"],
-                "definition_english": llm_result.get("english_definition", ""),
+                "definition_translated": llm_result.get("translated_definition", ""),
                 "examples": all_examples,
                 "audio": {"word_tts": word_audio_path, "examples_tts": example_audio_paths}
             }
             final_cards.append(word_card)
 
-            # 개별 단어 JSON 저장
             with open(os.path.join(word_dir, f"{word}_card.json"), 'w', encoding='utf-8') as f:
                 json.dump(word_card, f, ensure_ascii=False, indent=4)
         
 
-        # 전체 결과 병합 JSON 저장
         if final_cards:
             with open(os.path.join(output_dir, "all_vocab_cards.json"), 'w', encoding='utf-8') as f:
                 json.dump(final_cards, f, ensure_ascii=False, indent=4)
