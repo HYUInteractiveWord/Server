@@ -19,20 +19,16 @@ nlp_pipeline = KoreanLearningPipeline(
     model_name=settings.LLM_MODEL_NAME
 )
 
-# ==========================================
-# Pydantic Schemas
-# ==========================================
+
 class DictProcessRequest(BaseModel):
     extracted_words: Dict[str, Any]
+    target_language: str = "ru"
 
 class PreviewRequest(BaseModel):
     word: str
     definition: str
     pos: str
-
-# ==========================================
-# Routes
-# ==========================================
+    target_language: str = "ru" 
 @router.get("/search")
 async def search_dictionary(
     word: str = Query(..., min_length=1, description="검색할 단어"),
@@ -40,18 +36,13 @@ async def search_dictionary(
 ):
     """
     통합 사전 검색 API.
-
-    - 프론트 단어 검색용: word, pos, definition 반환
-    - 기존 파이프라인용: search_query, candidates 유지
     """
     word = word.strip()
     if not word:
         raise HTTPException(status_code=400, detail="검색어를 입력해주세요.")
 
-    # 1. 한국어 단어 정보 조회
     word_info = fetch_word_info(word)
 
-    # 2. 기존 후보 검색 기능도 유지
     candidates = []
     try:
         candidates = await nlp_pipeline.search_dictionary_candidates(
@@ -62,12 +53,9 @@ async def search_dictionary(
         print(f"[Dict Search] candidate search failed: {e}")
 
     return {
-        # 프론트용 필드
         "word": word,
         "pos": word_info.get("pos"),
         "definition": word_info.get("definition"),
-
-        # 기존 기능 유지용 필드
         "search_query": word,
         "candidates": candidates,
     }
@@ -76,15 +64,16 @@ async def search_dictionary(
 @router.post("/preview")
 async def get_word_preview(req: PreviewRequest):
     """
-    사전 검색 후 단어장 추가 전, 뜻과 발음(TTS)만 임시로 생성하여 반환
+    사전 검색 후 단어장 추가 전, 뜻과 발음(TTS)만 임시로 생성하여 반환 (다국어 호환)
     """
-    # 프론트에서 즉각적으로 재생할 수 있도록 임시 폴더에 TTS 생성
     output_dir = "static/tts/temp"
+    # ★ 연결 포인트: target_language 파라미터 유실 누락 결합 완료
     result = await nlp_pipeline.generate_word_preview(
         word=req.word, 
         definition=req.definition, 
         pos=req.pos, 
-        output_dir=output_dir
+        output_dir=output_dir,
+        target_language=req.target_language 
     )
     return result
 
@@ -120,9 +109,7 @@ async def process_dictionary_words(
 ):
     """
     [Phase 2] 사전 검색을 통해 선택된 단어를 단어장 카드로 생성
-    학습 스캔(scan_count) 포인트는 올리지 않음.
     """
-    # 유저의 기존 단어장 조회
     user_words = db.query(WordCard).filter(WordCard.user_id == current_user.id).all()
     word_map = {card.korean_word: card for card in user_words}
 
@@ -131,27 +118,38 @@ async def process_dictionary_words(
 
     for korean_word, info in req.extracted_words.items():
         if korean_word in word_map:
-            # 이미 단어장에 있는 경우 포인트(scan_count) 증가 없이 상태만 반환
             already_exists.append({
                 "word_card_id": word_map[korean_word].id, 
                 "korean_word": korean_word, 
                 "status": "already_in_wordbook"
             })
         else:
-            # 단어장에 없는 새로운 단어만 생성 큐로 이동
             new_candidates_for_generation[korean_word] = info
 
     generated_cards = []
     
-    # 새로운 단어가 있다면 LLM 예문 및 TTS 파일 생성
     if new_candidates_for_generation:
         user_output_dir = f"static/tts/user_{current_user.id}"
         generated_cards = await nlp_pipeline.phase2_generate(
             selected_words=new_candidates_for_generation,
-            output_dir=user_output_dir
+            output_dir=user_output_dir,
+            target_language=req.target_language
         )
         
-        # TODO: 생성된 generated_cards 데이터를 WordCard DB에 Insert (필요시 구현)
+        for card_data in generated_cards:
+            new_word_card = WordCard(
+                user_id=current_user.id,
+                korean_word=card_data["word"],
+                english_meaning=card_data["definition_translated"], # 공통 번역 필드로 대응
+                korean_definition=card_data["definition_korean"],
+                part_of_speech=card_data["pos_type"],
+                semantic_category=card_data["semantic_category"],
+                pronunciation=card_data["pronunciation"],
+                audio_path_word=card_data["audio"]["word_tts"],
+                scan_count=1
+            )
+            db.add(new_word_card)
+        db.commit()
 
     return {
         "already_exists": already_exists, 
