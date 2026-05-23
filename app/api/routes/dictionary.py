@@ -151,7 +151,7 @@ async def process_dictionary_words(
         user_output_dir = f"static/tts/user_{current_user.id}"
         generated_cards = await nlp_pipeline.phase2_generate(
             selected_words=new_candidates_for_generation,
-            output_dir=user_output_dir
+            output_dir=user_output_dir,
             target_language=req.target_language
         )
         

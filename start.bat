@@ -29,8 +29,8 @@ if not exist .venv (
     echo Installing base dependencies
     pip install -r requirements.txt
     echo.
-    echo Installing build tools
-    pip install ninja
+    echo Installing build tools and audio modules
+    pip install ninja librosa==0.10.1 fastdtw==0.3.4 soundfile==0.12.1
     
     echo.
     echo Initializing MSVC Environment
@@ -44,6 +44,14 @@ if not exist .venv (
 ) else (
     call .venv\Scripts\activate
 
+    python -c "import librosa" 2>nul || (
+        echo New modules not found. Installing librosa, fastdtw, soundfile...
+        pip install librosa==0.10.1 fastdtw==0.3.4 soundfile==0.12.1
+    )
+    python -c "import matplotlib.pyplot" 2>nul || (
+        echo New modules not found.
+        pip install matplotlib
+    )
     python -c "import llama_cpp" 2>nul || (
         echo llama-cpp-python not found. Installing...
         pip install ninja

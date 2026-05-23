@@ -44,6 +44,14 @@
         .record-btn { background-color: #10b981; margin-top: 15px; width: 100%; font-size: 1.1em; padding: 15px; }
         .record-btn.recording { background-color: #ef4444; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+        /* 시각화 그래프 그리드 및 점수판 */
+        .graph-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-top: 20px; }
+        .graph-img { width: 100%; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .score-box { background: #1e293b; color: white; padding: 15px; border-radius: 8px; display: flex; justify-content: space-around; margin-top: 15px; }
+        .score-item { text-align: center; }
+        .score-item span { display: block; font-size: 0.8em; color: #94a3b8; }
+        .score-item strong { font-size: 1.5em; color: #4ade80; }
     </style>
 </head>
 <body>
@@ -51,7 +59,6 @@
     <div class="header">
         <h2>K-Recorder Pipeline Prototype</h2>
         <div style="display: flex; align-items: center;">
-            <!-- 최상단 출력 언어 설정 탭 추가 -->
             <div class="lang-settings">
                 <span>🌐 출력 언어:</span>
                 <select id="targetLang">
@@ -152,10 +159,49 @@
         </div>
     </div>
 
+    <!-- 기존 결과 카드 섹션 -->
     <div class="card" id="step3" style="display: none;">
         <h3>Step 3. 생성된 K-Recorder 단어장</h3>
         <p style="font-size: 0.85em; color: #f43f5e;" id="pointWarning"></p>
         <div id="resultCards"></div>
+    </div>
+
+    <!-- 신규: 정밀 발음 평가 UI 패널 -->
+    <div class="card" id="advancedEvalSection" style="display: none; border: 2px solid #f59e0b;">
+        <h3 style="color: #b45309;">🔬 정밀 발음 분석 (DTW + Whisper)</h3>
+        <div class="preview-box" style="background: #fffbeb; border-color: #fcd34d;">
+            <h1 id="evalWord" style="margin: 0; color: #d97706; font-size: 2em;"></h1>
+            <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">기준 TTS와 사용자의 음향적 특성(파형, 억양, 속도)을 정밀 비교합니다.</p>
+            
+            <audio id="evalTtsAudio" controls style="display: block; margin: 10px auto;"></audio>
+            
+            <button id="evalRecordBtn" class="record-btn" style="background-color: #f59e0b;" onclick="toggleEvalRecording()">🎤 정밀 평가 녹음 시작</button>
+            <div id="evalLoader" class="loader" style="color: #d97706;">신호 전처리 및 MFCC 분석 중... (약 2~5초 소요)</div>
+        </div>
+
+        <div id="evalResultPanel" style="display: none;">
+            <div class="score-box">
+                <div class="score-item">
+                    <span>최종 평가 점수</span>
+                    <strong id="scoreFinal">0</strong>
+                </div>
+                <div class="score-item">
+                    <span>물리적 유사도 (DTW)</span>
+                    <strong id="scorePhysical" style="color:#60a5fa;">0</strong>
+                </div>
+                <div class="score-item">
+                    <span>감점(Penalty) 비율</span>
+                    <strong id="scorePenalty" style="color:#fb7185;">0</strong>
+                </div>
+            </div>
+            
+            <h4 style="margin-top:20px; color:#475569;">📊 시각화 분석 결과</h4>
+            <div class="graph-grid">
+                <img id="graphScore" class="graph-img" alt="Score Summary">
+                <img id="graphOverlay" class="graph-img" alt="Pitch Overlay">
+                <img id="graphAlignment" class="graph-img" alt="Pitch Alignment">
+            </div>
+        </div>
     </div>
 
     <script>
@@ -165,12 +211,19 @@
         let mediaRecorder;
         let audioChunks = [];
 
+        // 정밀 평가 관련 변수
+        let currentEvalWord = "";
+        let currentEvalTtsPath = "";
+        let evalMediaRecorder;
+        let evalAudioChunks = [];
+
         function switchTab(tabName) {
             document.getElementById('btnScan').classList.remove('active');
             document.getElementById('btnDict').classList.remove('active');
             document.getElementById('sectionScan').style.display = 'none';
             document.getElementById('sectionDict').style.display = 'none';
             document.getElementById('step3').style.display = 'none'; 
+            document.getElementById('advancedEvalSection').style.display = 'none';
 
             if(tabName === 'scan') {
                 document.getElementById('btnScan').classList.add('active');
@@ -314,7 +367,6 @@
                 
                 document.getElementById('previewPronunciation').innerText = `[ ${data.pronunciation || '발음기호 없음'} ]`;
                 
-                // 번역 데이터 렌더링 호환성 유지
                 const translatedText = data.definition_translated || data.definition_english || '';
                 document.getElementById('previewDefTrans').innerText = translatedText;
                 
@@ -415,7 +467,6 @@
             if (document.getElementById(btnId)) document.getElementById(btnId).disabled = true;
 
             try {
-                // 테스트용 엔드포인트 /api/scan/generate 로 변경 (인증 불필요)
                 const requestBody = { 
                     selected_words: selectedWords, 
                     target_language: targetLang,
@@ -459,7 +510,6 @@
 
                 cardsList.forEach(card => {
                     let examplesHtml = card.examples.map((ex, idx) => {
-                        // 다국어 키 유연성 확보 방어 코드
                         let translatedText = ex.translation || ex.english || '';
                         
                         return `
@@ -482,6 +532,10 @@
                             <hr style="margin: 15px 0; border-top: 1px dashed #e2e8f0;">
                             <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #475569;">Learning Examples</h4>
                             ${examplesHtml}
+                            <button onclick="openAdvancedEval('${card.word}', '${card.audio.word_tts}')" 
+                                style="background-color: #d97706; margin-top: 15px; width: 100%; padding: 10px; font-weight:bold;">
+                                정밀 발음 평가 (DTW + Whisper)
+                            </button>
                         </div>
                     `;
                     resultDiv.innerHTML += cardHtml;
@@ -501,6 +555,85 @@
                 if (document.getElementById(btnId) && sourceType === 'scan') {
                     document.getElementById(btnId).disabled = false;
                 }
+            }
+        }
+
+        // ==========================================
+        // 정밀 발음 평가 대시보드 로직
+        // ==========================================
+        function openAdvancedEval(word, ttsPath) {
+            currentEvalWord = word;
+            currentEvalTtsPath = ttsPath;
+
+            document.getElementById('advancedEvalSection').style.display = 'block';
+            document.getElementById('evalResultPanel').style.display = 'none';
+            document.getElementById('evalWord').innerText = word;
+            
+            const audioEl = document.getElementById('evalTtsAudio');
+            audioEl.src = "/" + ttsPath;
+
+            document.getElementById('advancedEvalSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function toggleEvalRecording() {
+            const recordBtn = document.getElementById('evalRecordBtn');
+            if (evalMediaRecorder && evalMediaRecorder.state === "recording") {
+                evalMediaRecorder.stop();
+                recordBtn.innerText = "🎤 정밀 평가 재녹음";
+                recordBtn.classList.remove('recording');
+                return;
+            }
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                evalMediaRecorder = new MediaRecorder(stream);
+                evalMediaRecorder.start();
+                evalAudioChunks = [];
+                evalMediaRecorder.addEventListener("dataavailable", event => evalAudioChunks.push(event.data));
+                evalMediaRecorder.addEventListener("stop", async () => {
+                    await submitAdvancedEval(new Blob(evalAudioChunks, { type: 'audio/wav' }));
+                });
+                recordBtn.innerText = "🛑 정밀 분석용 녹음 중... (완료 시 클릭)";
+                recordBtn.classList.add('recording');
+            } catch(e) {
+                alert("마이크 접근 권한을 허용해주세요.");
+            }
+        }
+
+        async function submitAdvancedEval(audioBlob) {
+            document.getElementById('evalLoader').style.display = 'block';
+            document.getElementById('evalResultPanel').style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('target_word', currentEvalWord);
+            formData.append('tts_audio_path', currentEvalTtsPath); 
+            formData.append('file', audioBlob, 'eval_record.wav');
+
+            try {
+                // 테스트용 라우터 호출 (DB 연결, 토큰 의존성 없음)
+                const res = await fetch('/api/pronunciation/evaluate_test', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error(`분석 서버 에러 (HTTP ${res.status})`);
+                
+                const data = await res.json();
+                
+                // 결과 점수 렌더링
+                const ev = data.evaluation;
+                document.getElementById('scoreFinal').innerText = ev.final_score;
+                document.getElementById('scorePhysical').innerText = ev.physical_score || ev.analysis_data.scores.final_score;
+                document.getElementById('scorePenalty').innerText = (ev.penalty_factor || 1.0) + "x";
+
+                // 시각화 이미지 렌더링 (경로 매핑)
+                const paths = data.graphs;
+                document.getElementById('graphScore').src = "/" + paths.score_summary;
+                document.getElementById('graphOverlay').src = "/" + paths.pitch_original;
+                document.getElementById('graphAlignment').src = "/" + paths.pitch_alignment_summary;
+
+                document.getElementById('evalResultPanel').style.display = 'block';
+
+            } catch(e) {
+                alert("정밀 평가 에러: " + e.message);
+            } finally {
+                document.getElementById('evalLoader').style.display = 'none';
             }
         }
     </script>

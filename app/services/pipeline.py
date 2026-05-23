@@ -35,7 +35,7 @@ def _run_demucs(input_path: str, out_dir: str) -> str | None:
     if result.returncode != 0:
         return None
     base_name = os.path.splitext(os.path.basename(input_path))[0]
-    vocals_path = os.path.join(out_dir, "htdemucs", base_name, "vocals.wav")
+    vocals_path = build_path(out_dir, "htdemucs", base_name, "vocals.wav")
     return vocals_path if os.path.exists(vocals_path) else None
 
 def _run_whisper(audio_path: str, model_size: str) -> str:
@@ -49,7 +49,7 @@ def extract_text_from_audio(audio_bytes: bytes, ffmpeg_bin: str, whisper_model_s
         os.environ["PATH"] = ffmpeg_bin + os.pathsep + os.environ.get("PATH", "")
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        input_path = os.path.join(tmpdir, f"{uuid.uuid4().hex}.wav")
+        input_path = build_path(tmpdir, f"{uuid.uuid4().hex}.wav")
         with open(input_path, "wb") as f:
             f.write(audio_bytes)
 
@@ -59,7 +59,9 @@ def extract_text_from_audio(audio_bytes: bytes, ffmpeg_bin: str, whisper_model_s
 
         return _run_whisper(vocals_path, whisper_model_size)
 
-
+def build_path(base, *parts):
+    path = os.path.join(base, *parts)
+    return path.replace("\\", "/")
 # 2. NLP & LLM Pipeline
 class KoreanLearningPipeline:
     def __init__(self, term_api_key: str, dict_api_key: str, model_name: str = "gemma-4"):
@@ -292,7 +294,7 @@ class KoreanLearningPipeline:
                         return f"{category_main} - {category_sub}".strip(" -")
             return ""
         except Exception as e:
-            print(f"  ❌ 온용어 검색 오류: {e}", flush=True)
+            print(f"  온용어 검색 오류: {e}", flush=True)
             return ""
 
     async def process_with_llm(self, word_raw: str, definition: str, pos: str, target_language: str = "en") -> dict:
@@ -420,7 +422,7 @@ class KoreanLearningPipeline:
             print(f"  [Error] Preview LLM failed: {e}", flush=True)
             llm_result = {"translated_definition": "", "romanization": ""}
             
-        word_audio_path = os.path.join(output_dir, f"temp_{word}_word.mp3")
+        word_audio_path = build_path(output_dir, f"temp_{word}_word.mp3")
         await self.generate_tts(word, word_audio_path)
         
         return {
@@ -473,7 +475,7 @@ class KoreanLearningPipeline:
         t_start = time.time()
 
         for word, info in selected_words.items():
-            word_dir = os.path.join(output_dir, word)
+            word_dir = build_path(output_dir, word)
             os.makedirs(word_dir, exist_ok=True)
 
             semantic_category = await self.fetch_on_term_category(word, info["definition"])
@@ -485,12 +487,12 @@ class KoreanLearningPipeline:
             all_examples = [{"type": "llm_generated", "korean": ex.get("korean", ""), "translation": ex.get("translation", "")} 
                             for ex in llm_result.get("easy_examples", [])]
             
-            word_audio_path = os.path.join(word_dir, f"{word}_word.mp3")
+            word_audio_path = build_path(word_dir, f"{word}_word.mp3")
             await self.generate_tts(word, word_audio_path)
             
             example_audio_paths = []
             for i, ex_obj in enumerate(all_examples):
-                ex_audio_path = os.path.join(word_dir, f"{word}_ex_{i+1}.mp3")
+                ex_audio_path = build_path(word_dir, f"{word}_ex_{i+1}.mp3")
                 await self.generate_tts(ex_obj["korean"], ex_audio_path)
                 example_audio_paths.append(ex_audio_path)
 
@@ -507,12 +509,12 @@ class KoreanLearningPipeline:
             }
             final_cards.append(word_card)
 
-            with open(os.path.join(word_dir, f"{word}_card.json"), 'w', encoding='utf-8') as f:
+            with open(build_path(word_dir, f"{word}_card.json"), 'w', encoding='utf-8') as f:
                 json.dump(word_card, f, ensure_ascii=False, indent=4)
         
 
         if final_cards:
-            with open(os.path.join(output_dir, "all_vocab_cards.json"), 'w', encoding='utf-8') as f:
+            with open(build_path(output_dir, "all_vocab_cards.json"), 'w', encoding='utf-8') as f:
                 json.dump(final_cards, f, ensure_ascii=False, indent=4)
                 
         print(f"  [Log] Phase 2 Total: {time.time() - t_start:.2f}s", flush=True)

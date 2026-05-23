@@ -1,65 +1,127 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
+import os
+import numpy as np
+import tempfile
+import math
+from pathlib import Path
+
 from app.db import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.models.word_card import WordCard
 from app.models.pronunciation_record import PronunciationRecord
-from app.schemas.pronunciation import PronunciationSubmit, PronunciationResponse
-from app.services.gamification import calculate_xp_gain, update_word_level
+from app.schemas.pronunciation import PronunciationResponse
+from app.services.gamification import calculate_xp_gain
+from app.services.evaluation import PronunciationEvaluator
+from app.services.pipeline import _get_whisper_model
+from app.core.config import settings
+from app.services.pronunciation.service import save_all_pitch_graphs
 
 router = APIRouter(prefix="/pronunciation", tags=["pronunciation"])
 
-XP_PER_PRACTICE = 10
+def make_serializable(obj):
+    if isinstance(obj, (np.float32, np.float64, float)):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return float(obj)
+    
+    if isinstance(obj, (np.int32, np.int64, int)):
+        return int(obj)
+        
+    if isinstance(obj, np.ndarray):
+        arr = obj.copy()
+        arr[~np.isfinite(arr)] = 0.0
+        return arr.tolist()
+        
+    if isinstance(obj, dict):
+        return {k: make_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [make_serializable(i) for i in obj]
+        
+    return obj
 
 
-@router.post("/submit", response_model=PronunciationResponse)
-def submit_pronunciation(
-    body: PronunciationSubmit,
+@router.post("/submit")
+async def submit_pronunciation(
+    word_card_id: int = Form(...),
+    korean_word: str = Form(...),
+    tts_audio_path: str = Form(...),
+    file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    김성준 모듈에서 DTW 기반 발음 분석 결과를 수신하여 저장.
-    최고 점수 갱신 시 단어 레벨 업 처리.
-    """
-    card = db.query(WordCard).filter(
-        WordCard.id == body.word_card_id,
-        WordCard.user_id == current_user.id,
-    ).first()
-    if not card:
-        raise HTTPException(status_code=404, detail="Word card not found")
+    audio_bytes = await file.read()
+    
+    clean_path = tts_audio_path.lstrip("/\\")
+    full_tts_path = Path.cwd() / clean_path
+    
+    if not full_tts_path.exists():
+        filename = os.path.basename(clean_path)
+        search_root = Path("static/tts")
+        found = False
+        for p in search_root.rglob(filename):
+            full_tts_path = p
+            found = True
+            break
+            
+        if not found:
+            raise HTTPException(status_code=404, detail="서버에서 기준 TTS 파일을 찾을 수 없습니다.")
 
-    record = PronunciationRecord(
-        user_id=current_user.id,
-        word_card_id=card.id,
-        score=body.score,
-        user_pitch_data=body.user_pitch_data,
-        reference_pitch_data=body.reference_pitch_data,
-        dtw_distance=body.dtw_distance,
-    )
-    db.add(record)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_user:
+        tmp_user.write(audio_bytes)
+        user_audio_path = tmp_user.name
 
-    is_new_best = body.score > card.best_score
-    if is_new_best:
-        card.best_score = body.score
-        new_level = update_word_level(card.level, body.score)
-        card.level = new_level
+    try:
+        whisper_model = _get_whisper_model(settings.WHISPER_MODEL)
+        evaluator = PronunciationEvaluator(whisper_model=whisper_model)
+        
+        eval_result = evaluator.evaluate(
+            target_word=korean_word,
+            tts_audio_path=str(full_tts_path),
+            user_audio_bytes=audio_bytes
+        )
+        
+        final_score = eval_result["final_score"]
+        analysis_data = eval_result["analysis_data"]
+        
+        user_pitch = make_serializable(analysis_data["plot_data"]["f0_usr"])
+        ref_pitch = make_serializable(analysis_data["plot_data"]["f0_ref"])
+        dtw_dist = make_serializable(analysis_data["pronunciation_detail"]["normalized_distance"])
 
-    xp_gained = calculate_xp_gain(body.score, is_new_best)
-    current_user.xp += xp_gained
+        record = PronunciationRecord(
+            user_id=current_user.id,
+            word_card_id=word_card_id,
+            score=final_score,
+            user_pitch_data=user_pitch,
+            reference_pitch_data=ref_pitch,
+            dtw_distance=dtw_dist,
+        )
+        db.add(record)
 
-    db.commit()
-    db.refresh(record)
-    db.refresh(card)
+        xp_gained = calculate_xp_gain(final_score, is_new_best=True)
+        current_user.xp += xp_gained
 
-    return PronunciationResponse(
-        record_id=record.id,
-        score=body.score,
-        is_new_best=is_new_best,
-        xp_gained=xp_gained,
-        word_card_level=card.level,
-    )
+        db.commit()
+        db.refresh(record)
+
+        graph_output_dir = "static/tts/graphs"
+        graph_data = save_all_pitch_graphs(
+            tts_path=str(full_tts_path),
+            user_path=user_audio_path,
+            output_dir=graph_output_dir
+        )
+
+        return {
+            "record_id": record.id,
+            "score": final_score,
+            "is_new_best": True,
+            "xp_gained": xp_gained,
+            "word_card_level": 0,
+            "graphs": graph_data["graph_paths"]
+        }
+    finally:
+        if os.path.exists(user_audio_path):
+            os.remove(user_audio_path)
 
 
 @router.get("/{word_card_id}/history")
@@ -73,3 +135,62 @@ def get_pronunciation_history(
         PronunciationRecord.user_id == current_user.id,
     ).order_by(PronunciationRecord.recorded_at.desc()).all()
     return records
+
+
+@router.post("/evaluate_test")
+async def evaluate_pronunciation_test(
+    target_word: str = Form(...),
+    tts_audio_path: str = Form(...),
+    file: UploadFile = File(...)
+):
+    audio_bytes = await file.read()
+    clean_path = tts_audio_path.lstrip("/\\")
+    target_path = Path.cwd() / clean_path
+    
+    if not target_path.exists():
+        filename = os.path.basename(clean_path)
+        search_root = Path("static/tts/test_user")
+        found = False
+        for p in search_root.rglob(filename):
+            target_path = p
+            found = True
+            break
+        
+        if not found:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"서버에서 파일을 찾을 수 없습니다. 경로를 확인하세요: {target_path}"
+            )
+
+    full_tts_path = target_path
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_user:
+        tmp_user.write(audio_bytes)
+        user_audio_path = tmp_user.name
+
+    try:
+        whisper_model = _get_whisper_model(settings.WHISPER_MODEL)
+        evaluator = PronunciationEvaluator(whisper_model=whisper_model)
+        
+        eval_result = evaluator.evaluate(
+            target_word=target_word,
+            tts_audio_path=str(full_tts_path),
+            user_audio_bytes=audio_bytes
+        )
+
+        graph_output_dir = "static/tts/graphs"
+        graph_data = save_all_pitch_graphs(
+            tts_path=str(full_tts_path),
+            user_path=user_audio_path,
+            output_dir=graph_output_dir
+        )
+
+        return make_serializable({
+            "status": "success",
+            "target_word": target_word,
+            "evaluation": eval_result,
+            "graphs": graph_data["graph_paths"]
+        })
+    finally:
+        if os.path.exists(user_audio_path):
+            os.remove(user_audio_path)

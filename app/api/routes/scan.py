@@ -24,12 +24,11 @@ nlp_pipeline = KoreanLearningPipeline(
 )
 
 
-# [프론트엔드 HTML 테스트용 API] 
 class GenerateRequest(BaseModel):
     selected_words: Dict[str, Any]
     target_language: str = "ru"
 
-@router.post("/generate")
+@router.post("/generate")# [프론트엔드 HTML 테스트용 API] 
 async def generate_cards_for_test(req: GenerateRequest):
     try:
         output_dir = "static/tts/test_user"
@@ -90,13 +89,14 @@ async def process_scan_result(
             new_word_card = WordCard(
                 user_id=current_user.id,
                 korean_word=card_data["word"],
-                english_meaning=card_data["definition_english"],
-                korean_definition=card_data["definition_korean"],
-                part_of_speech=card_data["pos_type"],
-                semantic_category=card_data["semantic_category"],
-                pronunciation=card_data["pronunciation"],
-                audio_path_word=card_data["audio"]["word_tts"],
-                scan_count=1  # 처음 생성 시 기본 1회 스캔으로 인정
+                pos=card_data["pos_type"],  
+                definition=card_data["definition_korean"], 
+                definition_english=card_data["definition_english"], 
+                example_sentences=card_data.get("examples", []),     
+                tts_audio_path=card_data["audio"]["word_tts"],   
+                pronunciation=card_data.get("pronunciation", ""), 
+                source=body.scan_source if hasattr(body, 'scan_source') else "scan",
+                scan_count=1 
             )
             db.add(new_word_card)
         
