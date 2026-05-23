@@ -152,6 +152,7 @@ async def process_dictionary_words(
         generated_cards = await nlp_pipeline.phase2_generate(
             selected_words=new_candidates_for_generation,
             output_dir=user_output_dir
+            target_language=req.target_language
         )
         
         # TODO: 생성된 generated_cards 데이터를 WordCard DB에 Insert (필요시 구현)
