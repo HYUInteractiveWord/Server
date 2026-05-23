@@ -27,3 +27,6 @@ edge-tts==7.2.8
 httpx
 soundfile
 yt-dlp>=2023.1.1
+librosa==0.10.1
+fastdtw==0.3.4
+soundfile==0.12.1

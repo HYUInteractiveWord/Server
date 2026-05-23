@@ -23,7 +23,6 @@ class WordCard(Base):
     word_point = Column(Integer, default=0)
     speaking_count = Column(Integer, default=0)
     effect_level = Column(Integer, default=0)
-
     # 수집 방법: "scan" | "dictionary"
     source = Column(String, default="dictionary")
 
