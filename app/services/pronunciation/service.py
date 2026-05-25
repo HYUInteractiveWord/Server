@@ -1,4 +1,6 @@
 import os
+import math
+import numpy as np
 from pathlib import Path
 
 from .analysis import (
@@ -24,9 +26,27 @@ from .visualization import (
 )
 
 
+def _safe_float_list(arr) -> list:
+    """
+    Numpy 배열을 List로 변환하면서 NaN(결측치)이나 Inf 값을 0.0으로 치환합니다.
+    이 과정을 거치지 않으면 안드로이드 JSON 파서가 에러를 뱉거나 빈 배열로 무시하여 
+    유저 피치 그래프가 사라지는 현상이 발생합니다.
+    """
+    if not hasattr(arr, 'tolist'):
+        arr = np.array(arr)
+    
+    safe_list = []
+    for x in arr.tolist():
+        if math.isnan(x) or math.isinf(x):
+            safe_list.append(0.0)
+        else:
+            safe_list.append(float(x))
+    return safe_list
+
+
 def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dict:
     """
-    전체 분석 결과 반환
+    전체 분석 결과 반환 (안드로이드 DTO 스펙 완벽 대응)
     """
     y_ref, sr_ref = load_audio_flexible(tts_path, sr=sr)
     y_usr, sr_usr = load_audio_flexible(user_path, sr=sr)
@@ -71,6 +91,8 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         y_usr_pitch, sr_usr,
     )
 
+    # 강세(intensity)는 P/F로만 판단하므로 최종 점수(final_score) 계산에서 제외
+    # 나머지 4가지 핵심 지표만 전달하여 25%씩 합산
     final_score = calculate_final_score(
         pronunciation_score=pron_result["score"],
         pitch_score=pitch_result["pitch_score"],
@@ -92,6 +114,23 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
             "tts": float(tts_voiced_ratio),
             "user": float(user_voiced_ratio),
         },
+        
+        "details": {
+            "pronunciation": float(pron_result["score"]),
+            "formant": float(formant_result["formant_score"]),
+            "pitch": float(pitch_result["pitch_score"]),
+            "timing": float(duration_result["duration_score"]),
+            "is_intensity_good": intensity_result["is_pass"]
+        },
+        
+        "raw_graph_data": {
+            "tts_time": _safe_float_list(t_ref),
+            "tts_pitch": _safe_float_list(f0_ref),
+            "user_time": _safe_float_list(t_usr),
+            "user_pitch": _safe_float_list(f0_usr),
+        },
+        
+        # 기존 백엔드 내부 로직을 위해 유지
         "scores": {
             "pronunciation_score": float(pron_result["score"]),
             "pitch_score": float(pitch_result["pitch_score"]),
@@ -111,6 +150,8 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         "duration_detail": duration_result,
         "intensity_detail": intensity_result,
         "formant_detail": formant_result,
+        
+        # 서버에서 이미지 그릴 때 사용하는 데이터
         "plot_data": {
             "t_ref": t_ref,
             "f0_ref": f0_ref,
@@ -189,6 +230,8 @@ def save_all_pitch_graphs(
 
     return {
         "scores": scores,
+        "details": result["details"],          
+        "raw_graph_data": result["raw_graph_data"], 
         "pitch_features": result["pitch_features"],
         "graph_dir": str(final_output_dir),
         "graph_paths": paths,

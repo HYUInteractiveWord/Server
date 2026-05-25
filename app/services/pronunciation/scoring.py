@@ -64,19 +64,33 @@ def pitch_similarity_scores(f0_ref, f0_usr) -> dict:
     ref_feat = pitch_features(f0_ref)
     usr_feat = pitch_features(f0_usr)
 
-    ref_mean = ref_feat["mean_f0"]
-    usr_mean = usr_feat["mean_f0"]
-    mean_error = abs(ref_mean - usr_mean) / max(ref_mean, 1e-6)
-    pitch_level_score = normalize_score_from_error(mean_error)
+    # 유성음(소리가 있는) 구간만 추출
+    ref_voiced = f0_ref[f0_ref > 0]
+    usr_voiced = f0_usr[f0_usr > 0]
 
-    ref_range = ref_feat["range_f0"]
-    usr_range = usr_feat["range_f0"]
-    if ref_range > 0:
-        range_error = abs(ref_range - usr_range) / ref_range
+    # 1. 표현력 (Relative Range - 변동계수 CV 비교)
+    ref_mean = np.mean(ref_voiced) if len(ref_voiced) > 0 else 1e-6
+    usr_mean = np.mean(usr_voiced) if len(usr_voiced) > 0 else 1e-6
+    
+    ref_std = np.std(ref_voiced) if len(ref_voiced) > 0 else 1e-6
+    usr_std = np.std(usr_voiced) if len(usr_voiced) > 0 else 1e-6
+
+    # CV(Coefficient of Variation) = 표준편차 / 평균
+    ref_cv = ref_std / max(ref_mean, 1e-6)
+    usr_cv = usr_std / max(usr_mean, 1e-6)
+
+    # 원본(TTS)이 매우 평탄한(Monotone) 경우의 예외 처리
+    if ref_cv < 1e-3:
+        if usr_cv < 1e-3:
+            pitch_range_score = 100.0
+        else:
+            # 원본은 평탄한데 사용자가 오버해서 읽은 경우 감점
+            pitch_range_score = max(0.0, 100.0 - (usr_cv * 100.0))
     else:
-        range_error = 1.0
-    pitch_range_score = normalize_score_from_error(range_error)
+        cv_error = abs(ref_cv - usr_cv) / ref_cv
+        pitch_range_score = normalize_score_from_error(cv_error)
 
+    # 2. 억양 흐름 (Contour - Z-Score 변환 후 형태 비교)
     ref_resampled = resample_array(f0_ref, target_len=200)
     usr_resampled = resample_array(f0_usr, target_len=200)
 
@@ -95,14 +109,14 @@ def pitch_similarity_scores(f0_ref, f0_usr) -> dict:
         scale=35.0,
     )
 
+    # 3. 최종 피치 점수 산출: 흐름(70%) + 표현력 폭(30%)
     pitch_score = (
-        0.3 * pitch_level_score +
-        0.3 * pitch_range_score +
-        0.4 * pitch_contour_score
+        0.7 * pitch_contour_score +
+        0.3 * pitch_range_score
     )
 
     return {
-        "pitch_level_score": float(pitch_level_score),
+        "pitch_level_score": 0.0, # (Deprecated) 절대 음고 점수 사용 안 함
         "pitch_range_score": float(pitch_range_score),
         "pitch_contour_score": float(pitch_contour_score),
         "pitch_score": float(pitch_score),
@@ -132,6 +146,7 @@ def intensity_similarity_score(y_ref, y_usr) -> dict:
     ref_mean = safe_mean(rms_ref)
     usr_mean = safe_mean(rms_usr)
 
+    # 강세는 점수가 아닌 P/F 통과 여부만 판단
     is_pass = bool(usr_mean > 0.01 or usr_mean > (ref_mean * 0.3))
 
     return {
@@ -165,9 +180,9 @@ def calculate_final_score(
     pronunciation_score: float, # MFCC
     pitch_score: float,         # 피치
     duration_score: float,      # 타이밍
-    intensity_score: float,     # 강도
     formant_score: float,       # 포먼트
 ) -> float:
+    # 4개 항목을 25%씩 동일 비율로 산정
     final_score = (
         0.25 * pronunciation_score +
         0.25 * formant_score +
