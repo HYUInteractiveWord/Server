@@ -111,14 +111,41 @@ async def submit_pronunciation(
             output_dir=graph_output_dir
         )
 
+        formatted_graphs = {}
+        if graph_data and "graph_paths" in graph_data:
+            for key, val in graph_data["graph_paths"].items():
+                formatted_graphs[key] = str(val)
+
+        detailed_scores = analysis_data["scores"]
+
+        plot_data = analysis_data["plot_data"]
+        raw_graph_json = {
+            "tts_time": make_serializable(plot_data["t_ref"]),
+            "tts_pitch": make_serializable(plot_data["f0_ref"]),
+            "user_time": make_serializable(plot_data["t_usr"]),
+            "user_pitch": make_serializable(plot_data["f0_usr"]),
+        }
+
+
         return {
             "record_id": record.id,
-            "score": final_score,
+            "score": float(final_score),
             "is_new_best": True,
-            "xp_gained": xp_gained,
+            "xp_gained": int(xp_gained),
             "word_card_level": 0,
-            "graphs": graph_data["graph_paths"]
+            "graphs": graph_data["graph_paths"],
+
+            "details": {
+                "pronunciation": float(detailed_scores["pronunciation_score"]),
+                "formant": float(detailed_scores["formant_score"]),
+                "pitch": float(detailed_scores["pitch_score"]),
+                "timing": float(detailed_scores["duration_score"]),
+                "is_intensity_good": bool(detailed_scores["intensity_pass"])
+            },
+
+            "raw_graph_data": raw_graph_json
         }
+    
     finally:
         if os.path.exists(user_audio_path):
             os.remove(user_audio_path)
@@ -185,12 +212,33 @@ async def evaluate_pronunciation_test(
             output_dir=graph_output_dir
         )
 
+        detailed_scores = eval_result["analysis_data"]["scores"]
+        plot_data = eval_result["analysis_data"]["plot_data"]
+        
+        raw_graph_json = {
+            "tts_time": make_serializable(plot_data["t_ref"]),
+            "tts_pitch": make_serializable(plot_data["f0_ref"]),
+            "user_time": make_serializable(plot_data["t_usr"]),
+            "user_pitch": make_serializable(plot_data["f0_usr"]),
+        }
+
         return make_serializable({
             "status": "success",
             "target_word": target_word,
             "evaluation": eval_result,
-            "graphs": graph_data["graph_paths"]
+            "graphs": graph_data["graph_paths"],
+
+            "details": {
+                "pronunciation": float(detailed_scores["pronunciation_score"]),
+                "formant": float(detailed_scores["formant_score"]),
+                "pitch": float(detailed_scores["pitch_score"]),
+                "timing": float(detailed_scores["duration_score"]),
+                "is_intensity_good": bool(detailed_scores["intensity_pass"])
+            },
+            "raw_graph_data": raw_graph_json
+
         })
+    
     finally:
         if os.path.exists(user_audio_path):
             os.remove(user_audio_path)

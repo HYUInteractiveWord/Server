@@ -9,6 +9,7 @@ from .analysis import (
     preprocess_for_pronunciation,
     resample_array,
     safe_mean,
+    extract_formants_lpc,
 )
 
 
@@ -131,26 +132,46 @@ def intensity_similarity_score(y_ref, y_usr) -> dict:
     ref_mean = safe_mean(rms_ref)
     usr_mean = safe_mean(rms_usr)
 
-    error = abs(ref_mean - usr_mean) / max(ref_mean, 1e-6)
-    score = normalize_score_from_error(error)
+    is_pass = bool(usr_mean > 0.01 or usr_mean > (ref_mean * 0.3))
 
     return {
         "ref_mean_rms": float(ref_mean),
         "usr_mean_rms": float(usr_mean),
-        "intensity_score": float(score),
+        "is_pass": is_pass,  
+    }
+
+def formant_similarity_score(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict:
+    """
+    F1, F2 주파수의 오차율을 계산하여 포먼트(모음 정확도) 점수를 산출합니다.
+    """
+    ref_formants = extract_formants_lpc(y_ref, sr_ref)
+    usr_formants = extract_formants_lpc(y_usr, sr_usr)
+
+    f1_error = abs(ref_formants["F1"] - usr_formants["F1"]) / max(ref_formants["F1"], 1e-6)
+    f2_error = abs(ref_formants["F2"] - usr_formants["F2"]) / max(ref_formants["F2"], 1e-6)
+
+    avg_error = (f1_error + f2_error) / 2.0
+
+    score = normalize_score_from_error(avg_error)
+
+    return {
+        "ref_formants": ref_formants,
+        "usr_formants": usr_formants,
+        "formant_score": float(score)
     }
 
 
 def calculate_final_score(
-    pronunciation_score: float,
-    pitch_score: float,
-    duration_score: float,
-    intensity_score: float,
+    pronunciation_score: float, # MFCC
+    pitch_score: float,         # 피치
+    duration_score: float,      # 타이밍
+    intensity_score: float,     # 강도
+    formant_score: float,       # 포먼트
 ) -> float:
     final_score = (
-        0.55 * pronunciation_score +
-        0.20 * pitch_score +
-        0.15 * duration_score +
-        0.10 * intensity_score
+        0.25 * pronunciation_score +
+        0.25 * formant_score +
+        0.25 * pitch_score +
+        0.25 * duration_score
     )
     return float(final_score)

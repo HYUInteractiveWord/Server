@@ -122,22 +122,23 @@ def save_score_summary_graph(scores: dict, output_path: str) -> str:
 
     labels = [
         "Pronunciation",
+        "Formant",
         "Pitch",
         "Duration",
-        "Intensity",
         "Final",
     ]
     values = [
         scores["pronunciation_score"],
+        scores["formant_score"],
         scores["pitch_score"],
         scores["duration_score"],
-        scores["intensity_score"],
         scores["final_score"],
     ]
 
     plt.figure(figsize=(10, 5))
     ax = plt.gca()
     bars = ax.bar(labels, values)
+    
     ax.set_ylim(0, 100)
     ax.set_ylabel("Score")
     ax.set_title("Score Summary")

@@ -268,3 +268,35 @@ def align_contours_by_cross_correlation(f0_ref, f0_usr, target_len: int = 200):
         usr_shifted = usr_n.copy()
 
     return ref_n, usr_n, usr_shifted, int(shift)
+
+
+def extract_formants_lpc(y, sr: int):
+    """
+    LPC(Linear Predictive Coding)를 사용하여 오디오의 평균 포먼트(F1, F2)를 추출합니다.
+    모음 발음의 정확도(혀의 높낮이, 입술의 둥글기 등)를 평가하는 데 사용됩니다.
+    """
+    y_preemp = librosa.effects.preemphasis(y)
+
+    order = 16
+    
+    if len(y_preemp) < order:
+        return {"F1": 0.0, "F2": 0.0}
+
+    a = librosa.lpc(y_preemp, order=order)
+
+    roots = np.roots(a)
+
+    roots = [r for r in roots if np.imag(r) > 0]
+
+    angles = np.arctan2(np.imag(roots), np.real(roots))
+    freqs = angles * (sr / (2 * np.pi))
+
+    freqs = sorted([f for f in freqs if f > 90])
+
+    f1 = freqs[0] if len(freqs) > 0 else 0.0
+    f2 = freqs[1] if len(freqs) > 1 else 0.0
+
+    return {
+        "F1": float(f1),
+        "F2": float(f2)
+    }

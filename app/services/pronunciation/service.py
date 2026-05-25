@@ -13,6 +13,7 @@ from .scoring import (
     pitch_similarity_scores,
     duration_similarity_score,
     intensity_similarity_score,
+    formant_similarity_score,
     calculate_final_score,
 )
 from .visualization import (
@@ -65,11 +66,16 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         y_usr_pitch,
     )
 
+    formant_result = formant_similarity_score(
+        y_ref_pitch, sr_ref,
+        y_usr_pitch, sr_usr,
+    )
+
     final_score = calculate_final_score(
         pronunciation_score=pron_result["score"],
         pitch_score=pitch_result["pitch_score"],
         duration_score=duration_result["duration_score"],
-        intensity_score=intensity_result["intensity_score"],
+        formant_score=formant_result["formant_score"],
     )
 
     return {
@@ -90,7 +96,8 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
             "pronunciation_score": float(pron_result["score"]),
             "pitch_score": float(pitch_result["pitch_score"]),
             "duration_score": float(duration_result["duration_score"]),
-            "intensity_score": float(intensity_result["intensity_score"]),
+            "formant_score": float(formant_result["formant_score"]),
+            "intensity_pass": intensity_result["is_pass"],          
             "final_score": float(final_score),
         },
         "pronunciation_detail": {
@@ -103,6 +110,7 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         },
         "duration_detail": duration_result,
         "intensity_detail": intensity_result,
+        "formant_detail": formant_result,
         "plot_data": {
             "t_ref": t_ref,
             "f0_ref": f0_ref,
