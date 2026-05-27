@@ -62,6 +62,8 @@ def extract_text_from_audio(audio_bytes: bytes, ffmpeg_bin: str, whisper_model_s
 def build_path(base, *parts):
     path = os.path.join(base, *parts)
     return path.replace("\\", "/")
+
+
 # 2. NLP & LLM Pipeline
 class KoreanLearningPipeline:
     def __init__(self, term_api_key: str, dict_api_key: str, model_name: str = "gemma-4"):
@@ -131,11 +133,7 @@ class KoreanLearningPipeline:
             response = await chain.ainvoke({"text": text})
             llm_raw_output = response.content.strip() 
             
-            cleaned_output = re.sub(
-    r'```json\n?|```', 
-    '', 
-    llm_raw_output
-    ).strip()
+            cleaned_output = re.sub(r'```json\n?|```', '', llm_raw_output).strip()
             
             try:
                 extracted_words = json.loads(cleaned_output)
@@ -298,27 +296,95 @@ class KoreanLearningPipeline:
             return ""
 
     async def process_with_llm(self, word_raw: str, definition: str, pos: str, target_language: str = "en") -> dict:
-        """LLM 번역 및 예문 생성 (다국어 지원)"""
+        """LLM 번역 및 품사별 문법 특화 예문 생성 (동사/명사/형용사별 분기 조건 적용)"""
         target_lang_str = self._get_lang_str(target_language)
         
-        prompt = PromptTemplate.from_template(
-            "[단어]: {word_raw} ({pos})\n"
-            "[정의]: {definition}\n"
-            "[목표 언어]: {target_lang_str}\n\n"
-            "위 데이터를 바탕으로 다음 JSON을 생성하세요:\n"
-            "1. translated_definition ('사전적 정의'를 [목표 언어]로 번역 또는 쉽게 설명)\n"
-            "2. easy_examples (초급 한국어 학습자를 위한 아주 쉽고 짧은 예문 2개. 각 객체는 한국어 원문(korean)과 [목표 언어] 번역(translation) 포함)\n"
-            "3. romanization (단어의 로마자 발음 표기)\n\n"
-            "반드시 다음 JSON 형식으로 응답하세요:\n"
-            "{{\n"
-            '  "translated_definition": "...",\n'
-            '  "easy_examples": [\n'
-            '    {{"korean": "한국어 예문 1", "translation": "번역 1"}},\n'
-            '    {{"korean": "한국어 예문 2", "translation": "번역 2"}}\n'
-            '  ],\n'
-            '  "romanization": "..."\n'
-            "}}"
-        )
+        # 1. 동사 분기 프롬프트 (과거, 현재, 미래 시제 반영)
+        if "동사" in pos or "Verb" in pos:
+            prompt_text = (
+                "[단어]: {word_raw} ({pos})\n"
+                "[정의]: {definition}\n"
+                "[목표 언어]: {target_lang_str}\n\n"
+                "당신은 국어교육학 전문가입니다. 위 단어를 사용하여 초급 한국어 학습자를 위한 쉽고 명확한 예문 3개를 생성하되, 반드시 아래 시제 조건에 맞춰 빌드하세요.\n"
+                "- 첫 번째 예문: 해당 동사의 '과거 시제' 형태가 들어간 예문\n"
+                "- 두 번째 예문: 해당 동사의 '현재 시제' 형태가 들어간 예문\n"
+                "- 세 번째 예문: 해당 동사의 '미래 시제(~을 것이다, ~겠습니다 등)' 형태가 들어간 예문\n\n"
+                "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
+                "{{\n"
+                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                '  "easy_examples": [\n'
+                '    {{"korean": "과거 시제 반영 문장", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "현재 시제 반영 문장", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "미래 시제 반영 문장", "translation": "목표 언어 번역"}}\n'
+                '  ],\n'
+                '  "romanization": "단어의 로마자 발음 표기"\n'
+                "}}"
+            )
+        
+        # 2. 명사 분기 프롬프트 (주어, 서술어, 목적어 위치 구조체 반영)
+        elif "명사" in pos or "Noun" in pos:
+            prompt_text = (
+                "[단어]: {word_raw} ({pos})\n"
+                "[정의]: {definition}\n"
+                "[목표 언어]: {target_lang_str}\n\n"
+                "당신은 국어교육학 전문가입니다. 위 명사를 사용하여 초급 한국어 학습자를 위한 쉽고 명확한 예문 3개를 생성하되, 문장 내 성분 및 위치 규칙에 맞추어 빌드하세요.\n"
+                "- 첫 번째 예문: 해당 명사가 문장 내에서 '주어(이/가, 은/는 결합)'로 사용된 예문\n"
+                "- 두 번째 예문: 해당 명사가 문장 내에서 '서술어(이체/이다 결합 또는 보어 자리)'로 사용된 예문\n"
+                "- 세 번째 예문: 해당 명사가 문장 내에서 '목적어(을/를 결합)'로 사용된 예문\n\n"
+                "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
+                "{{\n"
+                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                '  "easy_examples": [\n'
+                '    {{"korean": "명사가 주어로 쓰인 문장", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "명사가 서술어로 쓰인 문장", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "명사가 목적어로 쓰인 문장", "translation": "목표 언어 번역"}}\n'
+                '  ],\n'
+                '  "romanization": "단어의 로마자 발음 표기"\n'
+                "}}"
+            )
+            
+        # 3. 형용사 분기 프롬프트 (수식형과 문장 성분 배치 결합)
+        elif "형용사" in pos or "Adjective" in pos:
+            prompt_text = (
+                "[단어]: {word_raw} ({pos})\n"
+                "[정의]: {definition}\n"
+                "[목표 언어]: {target_lang_str}\n\n"
+                "당신은 국어교육학 전문가입니다. 위 형용사를 사용하여 초급 한국어 학습자를 위한 쉽고 명확한 예문 3개를 생성하되, 문장 내 결합 위치에 따라 다양하게 배치하세요.\n"
+                "- 첫 번째 예문: 해당 형용사가 명사 앞에서 명사를 직접 수식하는 '관형사형/수식어 위치(예: 예쁜 꽃)'로 쓰인 예문\n"
+                "- 두 번째 예문: 해당 형용사가 문장의 맨 끝에서 종결어미와 결합하여 '기본 서술어 위치(예: 꽃이 예쁘다)'로 쓰인 예문\n"
+                "- 세 번째 예문: 해당 형용사가 문장 중간에서 연결어미나 부사형 어미 등과 결합하여 '다양한 변형 구조 위치(예: 예쁘게 자라다, 예쁘고 좋다)'로 쓰인 예문\n\n"
+                "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
+                "{{\n"
+                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                '  "easy_examples": [\n'
+                '    {{"korean": "명사 수식형 구조의 문장", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "문장 끝 서술형 구조의 문장", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "연결 및 부사 구조적 변형 문장", "translation": "목표 언어 번역"}}\n'
+                '  ],\n'
+                '  "romanization": "단어의 로마자 발음 표기"\n'
+                "}}"
+            )
+            
+        # 4. Fallback (기타 부사, 관형사 등 예외 품사용 기본 3개 구성 자동 방어)
+        else:
+            prompt_text = (
+                "[단어]: {word_raw} ({pos})\n"
+                "[정의]: {definition}\n"
+                "[목표 언어]: {target_lang_str}\n\n"
+                "당신은 국어교육학 전문가입니다. 위 단어를 문맥 내에 배치하여 결합 형태가 서로 다른 유용하고 명확한 예문 3개를 생성하세요.\n"
+                "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
+                "{{\n"
+                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                '  "easy_examples": [\n'
+                '    {{"korean": "활용 예문 1", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "활용 예문 2", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "활용 예문 3", "translation": "목표 언어 번역"}}\n'
+                '  ],\n'
+                '  "romanization": "단어의 로마자 발음 표기"\n'
+                "}}"
+            )
+
+        prompt = PromptTemplate.from_template(prompt_text)
         chain = prompt | self.llm | self.json_parser
         try:
             return await chain.ainvoke({
@@ -482,6 +548,7 @@ class KoreanLearningPipeline:
             
             await asyncio.sleep(0.2)
             
+            # 수정한 품사별 맞춤 프롬프트 실행부 호출 (항상 3가지 예문 객체 획득)
             llm_result = await self.process_with_llm(word, info["definition"], info["pos"], target_language)
             
             all_examples = [{"type": "llm_generated", "korean": ex.get("korean", ""), "translation": ex.get("translation", "")} 
