@@ -299,6 +299,8 @@ class KoreanLearningPipeline:
         """LLM 번역 및 품사별 문법 특화 예문 생성 (동사/명사/형용사별 분기 조건 적용)"""
         target_lang_str = self._get_lang_str(target_language)
         
+        romanization_instruction = '"단어의 한국어 발음을 [목표 언어]의 문자로 소리나는 대로 표기 (예: 러시아어면 키릴 문자로 표기)"'
+        
         # 1. 동사 분기 프롬프트 (과거, 현재, 미래 시제 반영)
         if "동사" in pos or "Verb" in pos:
             prompt_text = (
@@ -317,10 +319,10 @@ class KoreanLearningPipeline:
                 '    {{"korean": "현재 시제 반영 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "미래 시제 반영 문장", "translation": "목표 언어 번역"}}\n'
                 '  ],\n'
-                '  "romanization": "단어의 로마자 발음 표기"\n'
+                f'  "romanization": {romanization_instruction}\n'
                 "}}"
             )
-        
+            
         # 2. 명사 분기 프롬프트 (주어, 서술어, 목적어 위치 구조체 반영)
         elif "명사" in pos or "Noun" in pos:
             prompt_text = (
@@ -339,7 +341,7 @@ class KoreanLearningPipeline:
                 '    {{"korean": "명사가 서술어로 쓰인 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "명사가 목적어로 쓰인 문장", "translation": "목표 언어 번역"}}\n'
                 '  ],\n'
-                '  "romanization": "단어의 로마자 발음 표기"\n'
+                f'  "romanization": {romanization_instruction}\n'
                 "}}"
             )
             
@@ -361,7 +363,7 @@ class KoreanLearningPipeline:
                 '    {{"korean": "문장 끝 서술형 구조의 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "연결 및 부사 구조적 변형 문장", "translation": "목표 언어 번역"}}\n'
                 '  ],\n'
-                '  "romanization": "단어의 로마자 발음 표기"\n'
+                f'  "romanization": {romanization_instruction}\n'
                 "}}"
             )
             
@@ -380,7 +382,7 @@ class KoreanLearningPipeline:
                 '    {{"korean": "활용 예문 2", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "활용 예문 3", "translation": "목표 언어 번역"}}\n'
                 '  ],\n'
-                '  "romanization": "단어의 로마자 발음 표기"\n'
+                f'  "romanization": {romanization_instruction}\n'
                 "}}"
             )
 
@@ -396,7 +398,6 @@ class KoreanLearningPipeline:
         except Exception as e:
             print(f"  [Error] process_with_llm failed: {e}", flush=True)
             return {"translated_definition": "", "easy_examples": [], "romanization": ""}
-
     async def generate_tts(self, text: str, output_path: str, lang: str = "ko"):
         if not text: return
         voice_map = {
