@@ -299,6 +299,8 @@ class KoreanLearningPipeline:
         """LLM 번역 및 품사별 문법 특화 예문 생성 (동사/명사/형용사별 분기 조건 적용)"""
         target_lang_str = self._get_lang_str(target_language)
         
+        romanization_instruction = '"단어의 한국어 발음을 [목표 언어]의 문자로 소리나는 대로 표기 (예: 러시아어면 키릴 문자로 표기)"'
+        
         # 1. 동사 분기 프롬프트 (과거, 현재, 미래 시제 반영)
         if "동사" in pos or "Verb" in pos:
             prompt_text = (
@@ -317,10 +319,10 @@ class KoreanLearningPipeline:
                 '    {{"korean": "현재 시제 반영 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "미래 시제 반영 문장", "translation": "목표 언어 번역"}}\n'
                 '  ],\n'
-                '  "romanization": "단어의 로마자 발음 표기"\n'
+                f'  "romanization": {romanization_instruction}\n'
                 "}}"
             )
-        
+            
         # 2. 명사 분기 프롬프트 (주어, 서술어, 목적어 위치 구조체 반영)
         elif "명사" in pos or "Noun" in pos:
             prompt_text = (
@@ -339,7 +341,7 @@ class KoreanLearningPipeline:
                 '    {{"korean": "명사가 서술어로 쓰인 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "명사가 목적어로 쓰인 문장", "translation": "목표 언어 번역"}}\n'
                 '  ],\n'
-                '  "romanization": "단어의 로마자 발음 표기"\n'
+                f'  "romanization": {romanization_instruction}\n'
                 "}}"
             )
             
@@ -361,7 +363,7 @@ class KoreanLearningPipeline:
                 '    {{"korean": "문장 끝 서술형 구조의 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "연결 및 부사 구조적 변형 문장", "translation": "목표 언어 번역"}}\n'
                 '  ],\n'
-                '  "romanization": "단어의 로마자 발음 표기"\n'
+                f'  "romanization": {romanization_instruction}\n'
                 "}}"
             )
             
@@ -380,7 +382,7 @@ class KoreanLearningPipeline:
                 '    {{"korean": "활용 예문 2", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "활용 예문 3", "translation": "목표 언어 번역"}}\n'
                 '  ],\n'
-                '  "romanization": "단어의 로마자 발음 표기"\n'
+                f'  "romanization": {romanization_instruction}\n'
                 "}}"
             )
 
@@ -396,10 +398,15 @@ class KoreanLearningPipeline:
         except Exception as e:
             print(f"  [Error] process_with_llm failed: {e}", flush=True)
             return {"translated_definition": "", "easy_examples": [], "romanization": ""}
-
-    async def generate_tts(self, text: str, output_path: str):
+    async def generate_tts(self, text: str, output_path: str, lang: str = "ko"):
         if not text: return
-        communicate = edge_tts.Communicate(text, "ko-KR-SunHiNeural")
+        voice_map = {
+            "ko": "ko-KR-SunHiNeural",
+            "ru": "ru-RU-SvetlanaNeural",
+            "en": "en-US-AriaNeural"
+        }
+        voice = voice_map.get(lang, "ko-KR-SunHiNeural")
+        communicate = edge_tts.Communicate(text, voice)
         await communicate.save(output_path)
 
     async def phase1_analyze(self, raw_stt_text: str) -> dict:
@@ -459,7 +466,7 @@ class KoreanLearningPipeline:
             return {}
 
     async def generate_word_preview(self, word: str, definition: str, pos: str, output_dir: str, target_language: str = "en") -> dict:
-        """사전에서 선택한 단어의 임시 프리뷰 생성 (발음기호, 번역, 단어 음성만 빠르게 생성)"""
+        """사전에서 선택한 단어의 정밀 프리뷰 생성 (발음 부호, 타겟언어 정의 번역 및 개별 뜻풀이 MP3 세트 일괄 빌드)"""
         os.makedirs(output_dir, exist_ok=True)
         print(f"\n[Preview] '{word}' 임시 확인용 데이터 생성 중...", flush=True)
         
@@ -470,7 +477,7 @@ class KoreanLearningPipeline:
             "[단어]: {word}\n[품사]: {pos}\n[정의]: {definition}\n[목표 언어]: {target_lang_str}\n\n"
             "이 단어에 대해 아래 JSON을 생성하세요:\n"
             "1. translated_definition (정의를 '목표 언어'로 번역 또는 쉽게 설명)\n"
-            "2. romanization (단어의 로마자 발음 표기)\n"
+            "2. romanization (단어의 정확한 로마자 발음 표기법)\n"
             "{{\n"
             '  "translated_definition": "...",\n'
             '  "romanization": "..."\n'
@@ -488,30 +495,36 @@ class KoreanLearningPipeline:
             print(f"  [Error] Preview LLM failed: {e}", flush=True)
             llm_result = {"translated_definition": "", "romanization": ""}
             
+        # 1. 한국어 표제어 음성 파일 생성
         word_audio_path = build_path(output_dir, f"temp_{word}_word.mp3")
-        await self.generate_tts(word, word_audio_path)
+        await self.generate_tts(word, word_audio_path, lang="ko")
+        
+        # 2. 번역 뜻 외국어(러시아어/영어 등) 음성 파일 빌드 추가
+        translated_def_text = llm_result.get("translated_definition", "")
+        def_trans_audio_path = build_path(output_dir, f"temp_{word}_def_trans.mp3")
+        await self.generate_tts(translated_def_text, def_trans_audio_path, lang=target_language)
         
         return {
             "word": word,
             "target_language": target_language,
             "pos_type": pos,
             "definition_korean": definition,
-            "definition_translated": llm_result.get("translated_definition", ""),
+            "definition_translated": translated_def_text,
             "pronunciation": llm_result.get("romanization", ""),
-            "audio_path": word_audio_path
+            "audio_path": word_audio_path,
+            "def_trans_audio_path": def_trans_audio_path 
         }
 
     async def verify_spoken_word(self, audio_bytes: bytes, ffmpeg_bin: str, whisper_model_size: str, target_word: str) -> dict:
-        """사용자가 녹음한 음성을 분석하여 타겟 단어와 일치하는지 검증"""
         print(f"\n[Verification] '{target_word}' 음성 검증 시작...", flush=True)
         
         try:
             raw_text = await asyncio.to_thread(
                 extract_text_from_audio, audio_bytes, ffmpeg_bin, whisper_model_size
             )
-            print(f"  -> STT 원문: {raw_text}", flush=True)
+            print(f"  -> STT 원문 (소음 정제 완료): {raw_text}", flush=True)
         except Exception as e:
-            print(f"  ❌ STT 추출 실패: {e}", flush=True)
+            print(f"   STT 추출 실패: {e}", flush=True)
             return {"is_match": False, "target_word": target_word, "spoken_raw": "", "spoken_corrected": ""}
 
         corrected_text = await self.correct_stt_text(raw_text)
@@ -535,7 +548,7 @@ class KoreanLearningPipeline:
         }
 
     async def phase2_generate(self, selected_words: dict, output_dir: str, target_language: str = "en") -> list:
-        """Phase 2: 선택된 단어 딕셔너리 수신 -> LLM 다국어 처리 -> TTS 생성 -> 파일 저장"""
+        """Phase 2: 선택된 단어 수신 -> 품사별 맞춤 문법 분석 -> 다국어 오디오(단어뜻, 예문뜻) 세트 전체 디스크 생성"""
         os.makedirs(output_dir, exist_ok=True)
         final_cards = []
         t_start = time.time()
@@ -548,20 +561,42 @@ class KoreanLearningPipeline:
             
             await asyncio.sleep(0.2)
             
-            # 수정한 품사별 맞춤 프롬프트 실행부 호출 (항상 3가지 예문 객체 획득)
+            # 품사 분기 세부 프롬프트 로직 가동
             llm_result = await self.process_with_llm(word, info["definition"], info["pos"], target_language)
+            translated_def_text = llm_result.get("translated_definition", "")
             
-            all_examples = [{"type": "llm_generated", "korean": ex.get("korean", ""), "translation": ex.get("translation", "")} 
-                            for ex in llm_result.get("easy_examples", [])]
-            
+            # 1. 한국어 표제어 음성 생성
             word_audio_path = build_path(word_dir, f"{word}_word.mp3")
-            await self.generate_tts(word, word_audio_path)
+            await self.generate_tts(word, word_audio_path, lang="ko")
             
+            # 2. 번역 뜻 외국어(러시아어/영어 등) 원어 음성 MP3 실제 생성 저장
+            def_trans_audio_path = build_path(word_dir, f"{word}_def_trans.mp3")
+            await self.generate_tts(translated_def_text, def_trans_audio_path, lang=target_language)
+            
+            # 3. 3가지 품사 특화형 예문 및 예문 번역어 MP3 상호 생성 처리
+            all_examples = []
             example_audio_paths = []
-            for i, ex_obj in enumerate(all_examples):
+            
+            for i, ex in enumerate(llm_result.get("easy_examples", [])):
+                kor_text = ex.get("korean", "")
+                trans_text = ex.get("translation", "")
+                
+                # 한국어 특화 예문형 MP3 생성
                 ex_audio_path = build_path(word_dir, f"{word}_ex_{i+1}.mp3")
-                await self.generate_tts(ex_obj["korean"], ex_audio_path)
+                await self.generate_tts(kor_text, ex_audio_path, lang="ko")
                 example_audio_paths.append(ex_audio_path)
+                
+                # 번역 예문 외국어 원어 MP3 생성 추가
+                trans_audio_path = build_path(word_dir, f"{word}_trans_ex_{i+1}.mp3")
+                await self.generate_tts(trans_text, trans_audio_path, lang=target_language)
+                
+                all_examples.append({
+                    "type": "llm_generated", 
+                    "korean": kor_text, 
+                    "translation": trans_text,
+                    "audio_path": ex_audio_path,        # 한국어 예문 오디오 경로
+                    "trans_audio_path": trans_audio_path # 외국어 번역 예문 오디오 경로
+                })
 
             word_card = {
                 "word": word,
@@ -570,9 +605,13 @@ class KoreanLearningPipeline:
                 "pos_type": info["pos"], 
                 "semantic_category": semantic_category,
                 "definition_korean": info["definition"],
-                "definition_translated": llm_result.get("translated_definition", ""),
+                "definition_translated": translated_def_text,
                 "examples": all_examples,
-                "audio": {"word_tts": word_audio_path, "examples_tts": example_audio_paths}
+                "audio": {
+                    "word_tts": word_audio_path, 
+                    "def_trans_tts": def_trans_audio_path,
+                    "examples_tts": example_audio_paths
+                }
             }
             final_cards.append(word_card)
 

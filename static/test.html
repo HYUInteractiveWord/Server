@@ -26,7 +26,7 @@
         .log-label { font-weight: bold; color: #38bdf8; display: block; margin-bottom: 2px; }
         .log-value { color: #f1f5f9; white-space: pre-wrap; word-break: break-all; font-family: 'Courier New', Courier, monospace; }
 
-        input[type="text"], select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 1em; margin-right: 10px; width: calc(100% - 150px); max-width: 300px; }
+        input[type="text"], select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 1em; margin-right: 10px; width: calc(100% - 150px); max-width: 300px; box-sizing: border-box; }
         button { background-color: #4f46e5; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 1em; transition: background-color 0.2s; }
         button:hover { background-color: #4338ca; }
         button:disabled { background-color: #a5b4fc; cursor: not-allowed; }
@@ -36,7 +36,10 @@
         .word-item:hover { border-color: #4f46e5; }
         
         .vocab-card { border-left: 4px solid #4f46e5; background: #fff; padding: 15px; margin-bottom: 15px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);}
-        audio { height: 30px; margin-top: 5px; }
+        audio { height: 35px; margin-top: 5px; width: 100%; max-width: 300px; }
+        .audio-row { display: flex; align-items: center; margin-bottom: 8px; gap: 10px; }
+        .audio-label { font-size: 0.85em; color: #64748b; width: 80px; text-align: right; font-weight: bold; }
+
         hr { border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0; }
 
         /* 녹음 검증 UI 스타일 */
@@ -73,6 +76,7 @@
     <div class="tabs">
         <button class="tab-btn active" id="btnScan" onclick="switchTab('scan')">🎤 음성 스캔</button>
         <button class="tab-btn" id="btnDict" onclick="switchTab('dict')">📖 다국어 사전 검색</button>
+        <button class="tab-btn" id="btnEval" onclick="switchTab('eval')">🔬 정밀 발음 평가</button>
     </div>
 
     <div id="sectionScan">
@@ -128,7 +132,7 @@
 
         <div class="card" id="dictStep2" style="display: none;">
             <h3>Step 2. 검색된 단어 매칭 결과</h3>
-            <p style="font-size: 0.85em; color: #666;">해당 외국어의 의미를 가지는 한국어 단어입니다. <strong>학습할 단어를 하나만 선택하세요.</strong></p>
+            <p style="font-size: 0.85em; color: #666;">해당 외국어의 의미를 가지는 한국어 단어입니다. 학습할 단어를 하나만 선택하세요.</p>
             <div id="dictCandidateList"></div>
             
             <button id="previewBtn" onclick="startPronunciationPractice()" style="margin-top: 15px; background-color: #0891b2;">이 단어 발음 연습하기</button>
@@ -145,7 +149,9 @@
                 <p id="previewDefTrans" style="font-size: 1em; color: #64748b; font-style: italic; margin-top: 0;"></p>
                 
                 <div id="previewLoader" class="loader" style="display:block;">TTS 발음 및 예비 데이터를 불러오는 중입니다...</div>
-                <audio id="previewAudio" controls style="display: none; margin: 10px auto;"></audio>
+                
+                <audio id="previewAudio" controls style="display: none; margin: 10px auto;" title="단어 원어 발음"></audio>
+                <audio id="previewTransAudio" controls style="display: none; margin: 5px auto;" title="단어 뜻 번역 발음"></audio>
 
                 <hr style="margin: 20px 0; border-top: 1px dashed #cbd5e1;">
                 
@@ -159,49 +165,68 @@
         </div>
     </div>
 
-    <!-- 기존 결과 카드 섹션 -->
+    <div id="sectionEval" style="display: none;">
+        <div class="card" style="border: 2px solid #f59e0b;">
+            <h3 style="color: #b45309;">🔬 독립형 정밀 발음 평가 (DTW + Whisper)</h3>
+            <p style="font-size: 0.85em; color: #666; margin-bottom: 15px;">로컬 환경에 저장된 단어 폴더 구조를 직접 불러와 평가할 수 있습니다.</p>
+
+            <div style="margin-bottom: 15px;">
+                <label style="display:block; font-weight:bold; margin-bottom:5px; color: #334155;">타겟 단어 (한국어):</label>
+                <div style="display: flex; gap: 10px;">
+                    <input list="evalWordList" id="evalInputWord" placeholder="단어 입력 또는 목록에서 선택" oninput="autoFillTtsPath()" style="flex: 1; max-width: none;">
+                    <datalist id="evalWordList"></datalist>
+                    
+                    <input type="file" id="folderInput" webkitdirectory directory style="display:none;" onchange="loadWordsFromFolder(event)">
+                    <button onclick="document.getElementById('folderInput').click()" style="background-color: #64748b; white-space: nowrap;" title="로컬의 test_user 폴더를 선택하면 단어 목록을 자동으로 추출합니다.">📂 로컬 폴더 불러오기</button>
+                </div>
+                <p style="font-size: 0.8em; color: #64748b; margin-top: 5px;">테스트용 로컬 폴더(test_user)를 선택하면 백엔드 API 없이 내부 단어를 자동 추출합니다.</p>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="display:block; font-weight:bold; margin-bottom:5px; color: #334155;">기준 TTS 서버 경로 (자동 완성):</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="evalInputPath" placeholder="예: static/tts/test_user/단어/단어_word.mp3" style="flex: 1; max-width: none; margin-bottom: 5px;">
+                    <button onclick="loadEvalTts()" style="background-color: #f59e0b; white-space: nowrap;">음원 불러오기</button>
+                </div>
+            </div>
+
+            <div class="preview-box" id="evalPreviewBox" style="background: #fffbeb; border-color: #fcd34d; display: none;">
+                <h1 id="evalDisplayWord" style="margin: 0; color: #d97706; font-size: 2em;"></h1>
+                <audio id="evalTtsAudio" controls style="display: block; margin: 10px auto;"></audio>
+                
+                <button id="evalRecordBtn" class="record-btn" style="background-color: #f59e0b;" onclick="toggleEvalRecording()">🎤 평가용 녹음 시작</button>
+                <div id="evalLoader" class="loader" style="color: #d97706;">신호 전처리 및 MFCC 분석 중... (약 2~5초 소요)</div>
+            </div>
+
+            <div id="evalResultPanel" style="display: none;">
+                <div class="score-box">
+                    <div class="score-item">
+                        <span>최종 평가 점수</span>
+                        <strong id="scoreFinal">0</strong>
+                    </div>
+                    <div class="score-item">
+                        <span>물리적 유사도 (DTW)</span>
+                        <strong id="scorePhysical" style="color:#60a5fa;">0</strong>
+                    </div>
+                    <div class="score-item">
+                        <span>감점(Penalty) 비율</span>
+                        <strong id="scorePenalty" style="color:#fb7185;">0</strong>
+                    </div>
+                </div>
+                
+                <h4 style="margin-top:20px; color:#475569;">📊 시각화 분석 결과</h4>
+                <div class="graph-grid">
+                    <img id="graphScore" class="graph-img" alt="Score Summary">
+                    <img id="graphOverlay" class="graph-img" alt="Pitch Overlay">
+                    <img id="graphAlignment" class="graph-img" alt="Pitch Alignment">
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card" id="step3" style="display: none;">
         <h3>Step 3. 생성된 K-Recorder 단어장</h3>
         <p style="font-size: 0.85em; color: #f43f5e;" id="pointWarning"></p>
         <div id="resultCards"></div>
-    </div>
-
-    <!-- 신규: 정밀 발음 평가 UI 패널 -->
-    <div class="card" id="advancedEvalSection" style="display: none; border: 2px solid #f59e0b;">
-        <h3 style="color: #b45309;">🔬 정밀 발음 분석 (DTW + Whisper)</h3>
-        <div class="preview-box" style="background: #fffbeb; border-color: #fcd34d;">
-            <h1 id="evalWord" style="margin: 0; color: #d97706; font-size: 2em;"></h1>
-            <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">기준 TTS와 사용자의 음향적 특성(파형, 억양, 속도)을 정밀 비교합니다.</p>
-            
-            <audio id="evalTtsAudio" controls style="display: block; margin: 10px auto;"></audio>
-            
-            <button id="evalRecordBtn" class="record-btn" style="background-color: #f59e0b;" onclick="toggleEvalRecording()">🎤 정밀 평가 녹음 시작</button>
-            <div id="evalLoader" class="loader" style="color: #d97706;">신호 전처리 및 MFCC 분석 중... (약 2~5초 소요)</div>
-        </div>
-
-        <div id="evalResultPanel" style="display: none;">
-            <div class="score-box">
-                <div class="score-item">
-                    <span>최종 평가 점수</span>
-                    <strong id="scoreFinal">0</strong>
-                </div>
-                <div class="score-item">
-                    <span>물리적 유사도 (DTW)</span>
-                    <strong id="scorePhysical" style="color:#60a5fa;">0</strong>
-                </div>
-                <div class="score-item">
-                    <span>감점(Penalty) 비율</span>
-                    <strong id="scorePenalty" style="color:#fb7185;">0</strong>
-                </div>
-            </div>
-            
-            <h4 style="margin-top:20px; color:#475569;">📊 시각화 분석 결과</h4>
-            <div class="graph-grid">
-                <img id="graphScore" class="graph-img" alt="Score Summary">
-                <img id="graphOverlay" class="graph-img" alt="Pitch Overlay">
-                <img id="graphAlignment" class="graph-img" alt="Pitch Alignment">
-            </div>
-        </div>
     </div>
 
     <script>
@@ -211,26 +236,22 @@
         let mediaRecorder;
         let audioChunks = [];
 
-        // 정밀 평가 관련 변수
-        let currentEvalWord = "";
-        let currentEvalTtsPath = "";
         let evalMediaRecorder;
         let evalAudioChunks = [];
 
         function switchTab(tabName) {
-            document.getElementById('btnScan').classList.remove('active');
-            document.getElementById('btnDict').classList.remove('active');
-            document.getElementById('sectionScan').style.display = 'none';
-            document.getElementById('sectionDict').style.display = 'none';
-            document.getElementById('step3').style.display = 'none'; 
-            document.getElementById('advancedEvalSection').style.display = 'none';
+            ['btnScan', 'btnDict', 'btnEval'].forEach(id => document.getElementById(id).classList.remove('active'));
+            ['sectionScan', 'sectionDict', 'sectionEval', 'step3'].forEach(id => document.getElementById(id).style.display = 'none');
 
             if(tabName === 'scan') {
                 document.getElementById('btnScan').classList.add('active');
                 document.getElementById('sectionScan').style.display = 'block';
-            } else {
+            } else if (tabName === 'dict') {
                 document.getElementById('btnDict').classList.add('active');
                 document.getElementById('sectionDict').style.display = 'block';
+            } else {
+                document.getElementById('btnEval').classList.add('active');
+                document.getElementById('sectionEval').style.display = 'block';
             }
         }
 
@@ -349,6 +370,7 @@
             
             document.getElementById('previewLoader').style.display = 'block';
             document.getElementById('previewAudio').style.display = 'none';
+            document.getElementById('previewTransAudio').style.display = 'none';
             document.getElementById('recordBtn').disabled = true;
 
             try {
@@ -366,13 +388,18 @@
                 const data = await res.json();
                 
                 document.getElementById('previewPronunciation').innerText = `[ ${data.pronunciation || '발음기호 없음'} ]`;
-                
                 const translatedText = data.definition_translated || data.definition_english || '';
                 document.getElementById('previewDefTrans').innerText = translatedText;
                 
                 const audioEl = document.getElementById('previewAudio');
                 audioEl.src = "/" + data.audio_path;
                 audioEl.style.display = 'block';
+                
+                if (data.def_trans_audio_path) {
+                    const transAudioEl = document.getElementById('previewTransAudio');
+                    transAudioEl.src = "/" + data.def_trans_audio_path;
+                    transAudioEl.style.display = 'block';
+                }
                 
                 document.getElementById('recordBtn').disabled = false;
             } catch(e) {
@@ -448,7 +475,6 @@
         async function generateCards(sourceType) {
             const selectedWords = {};
             let loaderId, btnId;
-            
             const targetLang = document.getElementById('targetLang').value; 
 
             if (sourceType === 'scan') {
@@ -475,15 +501,11 @@
 
                 const response = await fetch('/api/scan/generate', { 
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody)
                 });
 
-                if (!response.ok) {
-                    throw new Error(`서버 오류 발생 (HTTP ${response.status})`);
-                }
+                if (!response.ok) throw new Error(`서버 오류 발생 (HTTP ${response.status})`);
 
                 const data = await response.json();
                 
@@ -498,7 +520,7 @@
                 
                 const warningP = document.getElementById('pointWarning');
                 if(sourceType === 'scan') {
-                    warningP.innerHTML = "스캔 모드: 이미 단어장에 있는 단어라면 <strong>리스닝 포인트(Scan Count)</strong>가 증가합니다.";
+                    warningP.innerHTML = "스캔 모드: 이미 단어장에 있는 단어라면 리스닝 포인트(Scan Count)가 증가합니다.";
                     warningP.style.color = "#4f46e5";
                 } else {
                     warningP.innerHTML = "사전 연습 모드: 스스로 발음 검증을 마친 단어가 단어장에 추가되었습니다!";
@@ -511,12 +533,19 @@
                 cardsList.forEach(card => {
                     let examplesHtml = card.examples.map((ex, idx) => {
                         let translatedText = ex.translation || ex.english || '';
-                        
                         return `
                         <div style="margin-top: 12px; font-size: 0.9em; background: #f1f5f9; padding: 10px; border-radius: 5px;">
                             <p style="margin: 0; font-weight: 500;">🇰🇷 ${ex.korean}</p>
                             <p style="margin: 3px 0 8px 0; color: #666; font-size: 0.95em;">🌍 ${translatedText}</p>
-                            <audio controls src="/${card.audio.examples_tts[idx]}"></audio>
+                            
+                            <div class="audio-row">
+                                <span class="audio-label">한국어:</span>
+                                <audio controls src="/${ex.audio_path}"></audio>
+                            </div>
+                            <div class="audio-row">
+                                <span class="audio-label">타겟 언어:</span>
+                                <audio controls src="/${ex.trans_audio_path}"></audio>
+                            </div>
                         </div>
                     `}).join('');
 
@@ -524,17 +553,27 @@
 
                     const cardHtml = `
                         <div class="vocab-card">
-                            <h2 style="margin: 0; color: #4f46e5;">${card.word} <span style="font-size: 0.5em; color: #94a3b8; font-weight: normal;">${card.pronunciation || ''}</span></h2>
-                            <p style="margin: 8px 0; font-size: 0.9em;"><strong>분류:</strong> <span style="color: #0891b2;">${card.semantic_category || '일반'}</span></p>
-                            <p style="margin: 5px 0;"><strong>뜻:</strong> ${card.definition_korean}</p>
-                            <p style="margin: 5px 0; color: #64748b; font-style: italic;"><strong>Meaning:</strong> ${defTranslatedText}</p>
-                            <audio controls src="/${card.audio.word_tts}"></audio>
+                            <h2 style="margin: 0; color: #4f46e5;">${card.word} <span style="font-size: 0.5em; color: #94a3b8; font-weight: normal;">[ ${card.pronunciation || ''} ]</span></h2>
+                            <p style="margin: 8px 0; font-size: 0.9em;">분류: <span style="color: #0891b2;">${card.semantic_category || '일반'}</span></p>
+                            
+                            <div style="margin-top: 15px;">
+                                <p style="margin: 5px 0;">뜻: ${card.definition_korean}</p>
+                                <div class="audio-row" style="justify-content: flex-start; margin-bottom: 10px;">
+                                    <audio controls src="/${card.audio.word_tts}" title="단어 원어 발음"></audio>
+                                </div>
+                                
+                                <p style="margin: 5px 0; color: #64748b; font-style: italic;">Meaning: ${defTranslatedText}</p>
+                                <div class="audio-row" style="justify-content: flex-start;">
+                                    <audio controls src="/${card.audio.def_trans_tts}" title="단어 뜻 번역 발음"></audio>
+                                </div>
+                            </div>
+                            
                             <hr style="margin: 15px 0; border-top: 1px dashed #e2e8f0;">
                             <h4 style="margin: 0 0 10px 0; font-size: 0.9em; color: #475569;">Learning Examples</h4>
                             ${examplesHtml}
-                            <button onclick="openAdvancedEval('${card.word}', '${card.audio.word_tts}')" 
+                            <button onclick="transferToEvalTab('${card.word}', '${card.audio.word_tts}')" 
                                 style="background-color: #d97706; margin-top: 15px; width: 100%; padding: 10px; font-weight:bold;">
-                                정밀 발음 평가 (DTW + Whisper)
+                                이 단어로 정밀 발음 평가하기
                             </button>
                         </div>
                     `;
@@ -558,21 +597,74 @@
             }
         }
 
-        // ==========================================
-        // 정밀 발음 평가 대시보드 로직
-        // ==========================================
-        function openAdvancedEval(word, ttsPath) {
-            currentEvalWord = word;
-            currentEvalTtsPath = ttsPath;
+        function loadWordsFromFolder(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
 
-            document.getElementById('advancedEvalSection').style.display = 'block';
+            const wordSet = new Set();
+            for (let i = 0; i < files.length; i++) {
+                const path = files[i].webkitRelativePath;
+                const parts = path.split('/');
+                
+                const targetDirIndex = parts.indexOf('test_user');
+                if (targetDirIndex !== -1 && parts.length > targetDirIndex + 1) {
+                    const wordFolder = parts[targetDirIndex + 1];
+                    if(wordFolder && !wordFolder.includes('.')) {
+                        wordSet.add(wordFolder);
+                    }
+                }
+            }
+
+            const dataList = document.getElementById('evalWordList');
+            dataList.innerHTML = '';
+
+            if (wordSet.size === 0) {
+                alert("'test_user' 폴더 구조를 찾을 수 없습니다. 올바른 폴더를 선택했는지 확인해주세요.");
+                return;
+            }
+
+            wordSet.forEach(w => {
+                const opt = document.createElement('option');
+                opt.value = w;
+                dataList.appendChild(opt);
+            });
+
+            alert(`총 ${wordSet.size}개의 단어 목록을 성공적으로 불러왔습니다!\n입력창을 클릭하거나 타이핑하여 선택하세요.`);
+        }
+
+        function autoFillTtsPath() {
+            const word = document.getElementById('evalInputWord').value.trim();
+            if(word) {
+                document.getElementById('evalInputPath').value = `static/tts/test_user/${word}/${word}_word.mp3`;
+            } else {
+                document.getElementById('evalInputPath').value = "";
+            }
+        }
+
+        function transferToEvalTab(word, ttsPath) {
+            switchTab('eval');
+            document.getElementById('evalInputWord').value = word;
+            document.getElementById('evalInputPath').value = ttsPath;
             document.getElementById('evalResultPanel').style.display = 'none';
-            document.getElementById('evalWord').innerText = word;
+            document.getElementById('sectionEval').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function loadEvalTts() {
+            const word = document.getElementById('evalInputWord').value.trim();
+            const ttsPath = document.getElementById('evalInputPath').value.trim();
             
+            if (!word || !ttsPath) {
+                alert("타겟 단어와 기준 TTS 경로를 모두 입력하세요.");
+                return;
+            }
+            
+            document.getElementById('evalDisplayWord').innerText = word;
+            document.getElementById('evalPreviewBox').style.display = 'block';
+
             const audioEl = document.getElementById('evalTtsAudio');
             audioEl.src = "/" + ttsPath;
-
-            document.getElementById('advancedEvalSection').scrollIntoView({ behavior: 'smooth' });
+            
+            document.getElementById('evalRecordBtn').style.display = 'block';
         }
 
         async function toggleEvalRecording() {
@@ -601,35 +693,34 @@
         }
 
         async function submitAdvancedEval(audioBlob) {
+            const word = document.getElementById('evalInputWord').value.trim();
+            const ttsPath = document.getElementById('evalInputPath').value.trim();
+
             document.getElementById('evalLoader').style.display = 'block';
             document.getElementById('evalResultPanel').style.display = 'none';
 
             const formData = new FormData();
-            formData.append('target_word', currentEvalWord);
-            formData.append('tts_audio_path', currentEvalTtsPath); 
+            formData.append('target_word', word);
+            formData.append('tts_audio_path', ttsPath); 
             formData.append('file', audioBlob, 'eval_record.wav');
 
             try {
-                // 테스트용 라우터 호출 (DB 연결, 토큰 의존성 없음)
                 const res = await fetch('/api/pronunciation/evaluate_test', { method: 'POST', body: formData });
                 if (!res.ok) throw new Error(`분석 서버 에러 (HTTP ${res.status})`);
                 
                 const data = await res.json();
                 
-                // 결과 점수 렌더링
                 const ev = data.evaluation;
                 document.getElementById('scoreFinal').innerText = ev.final_score;
                 document.getElementById('scorePhysical').innerText = ev.physical_score || ev.analysis_data.scores.final_score;
                 document.getElementById('scorePenalty').innerText = (ev.penalty_factor || 1.0) + "x";
 
-                // 시각화 이미지 렌더링 (경로 매핑)
                 const paths = data.graphs;
                 document.getElementById('graphScore').src = "/" + paths.score_summary;
                 document.getElementById('graphOverlay').src = "/" + paths.pitch_original;
                 document.getElementById('graphAlignment').src = "/" + paths.pitch_alignment_summary;
 
                 document.getElementById('evalResultPanel').style.display = 'block';
-
             } catch(e) {
                 alert("정밀 평가 에러: " + e.message);
             } finally {
