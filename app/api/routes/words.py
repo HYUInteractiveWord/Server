@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -65,22 +65,22 @@ def _refresh_user_rank_and_slots(user: User) -> None:
         user.max_word_slots = RANK_WORD_SLOTS[new_rank]
 
 
+
 def _increase_daily_mission_progress(
     db: Session,
     user_id: int,
     mission_type: str,
     amount: int = 1,
 ) -> Mission | None:
-    today = date.today()
+    today = datetime.now(timezone(timedelta(hours=9))).date()
+    fallback = DAILY_MISSION_FALLBACKS.get(mission_type)
 
     mission = db.query(Mission).filter(
         Mission.user_id == user_id,
         Mission.mission_type == mission_type,
-        func.date(Mission.created_at) == today,
     ).first()
 
     if mission is None:
-        fallback = DAILY_MISSION_FALLBACKS.get(mission_type)
         if fallback is None:
             return None
 
@@ -89,9 +89,22 @@ def _increase_daily_mission_progress(
             mission_type=mission_type,
             target=fallback["target"],
             xp_reward=fallback["xp_reward"],
+            progress=0,
+            is_completed=False,
+            completed_at=None,
+            last_reset_date=today,
         )
         db.add(mission)
-        db.flush()
+    else:
+        if mission.last_reset_date != today:
+            mission.progress = 0
+            mission.is_completed = False
+            mission.completed_at = None
+            mission.last_reset_date = today
+
+        if fallback is not None:
+            mission.target = fallback["target"]
+            mission.xp_reward = fallback["xp_reward"]
 
     if not mission.is_completed:
         mission.progress = min(
@@ -100,7 +113,6 @@ def _increase_daily_mission_progress(
         )
 
     return mission
-
 
 def _complete_mission_if_ready(mission: Mission | None, user: User) -> int:
     if mission is None:
