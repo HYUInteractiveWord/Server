@@ -122,17 +122,17 @@ def save_score_summary_graph(scores: dict, output_path: str) -> str:
 
     labels = [
         "Pronunciation",
-        "Formant",
+        "Phoneme",
         "Pitch",
         "Duration",
         "Final",
     ]
     values = [
-        scores["pronunciation_score"],
-        scores["formant_score"],
-        scores["pitch_score"],
-        scores["duration_score"],
-        scores["final_score"],
+        scores.get("pronunciation_score", 0.0),
+        scores.get("phoneme_score", 0.0),
+        scores.get("pitch_score", 0.0),
+        scores.get("duration_score", 0.0),
+        scores.get("final_score", 0.0),
     ]
 
     plt.figure(figsize=(10, 5))
