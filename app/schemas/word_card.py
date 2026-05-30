@@ -15,6 +15,10 @@ class WordCardResponse(BaseModel):
     korean_word: str
     pos: Optional[str]
     definition: Optional[str]
+    definition_english: Optional[str] = None 
+    pronunciation: Optional[str] = None
+    def_trans_audio_path: Optional[str] = None
+    
     example_sentences: Optional[list]
     tts_audio_path: Optional[str]
     level: int
