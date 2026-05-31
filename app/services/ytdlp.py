@@ -18,19 +18,20 @@ def _extract_video_id(url: str) -> str:
 
 
 def _get_transcript_sync(video_id: str) -> str:
+    ytt = YouTubeTranscriptApi()
     try:
-        entries = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
+        transcript = ytt.fetch(video_id, languages=['ko'])
+        return ' '.join(snippet.text for snippet in transcript)
     except NoTranscriptFound:
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = ytt.list(video_id)
             generated = transcript_list.find_generated_transcript(['ko'])
-            entries = generated.fetch()
+            fetched = generated.fetch()
+            return ' '.join(snippet.text for snippet in fetched)
         except Exception:
             raise RuntimeError("이 영상에 한국어 자막이 없습니다.")
     except TranscriptsDisabled:
         raise RuntimeError("이 영상은 자막이 비활성화되어 있습니다.")
-
-    return ' '.join(entry['text'] for entry in entries)
 
 
 async def get_youtube_transcript(url: str) -> str:
