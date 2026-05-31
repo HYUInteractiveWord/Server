@@ -17,6 +17,8 @@ class User(Base):
     rank = Column(String, default="Bronze")
     max_word_slots = Column(Integer, default=20)
 
+    preferred_language = Column(String, default="ko")
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     word_cards = relationship("WordCard", back_populates="user", cascade="all, delete-orphan")

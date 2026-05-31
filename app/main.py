@@ -4,10 +4,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse # 추가
 from pathlib import Path
 
+from sqlalchemy import text
 from app.db import Base, engine
 from app.api.routes import auth, words, scan, pronunciation, missions, dictionary
 
 Base.metadata.create_all(bind=engine)
+
+# Safe migration: add preferred_language to existing databases
+with engine.connect() as _conn:
+    _conn.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_language VARCHAR DEFAULT 'ko'"
+    ))
+    _conn.commit()
 
 app = FastAPI(
     title="InteractiveWord API",

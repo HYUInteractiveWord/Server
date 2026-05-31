@@ -28,6 +28,7 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
         username=body.username,
         email=body.email,
         hashed_password=hash_password(body.password),
+        preferred_language=body.preferred_language,
     )
     db.add(user)
     db.flush()
