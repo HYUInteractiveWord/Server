@@ -13,7 +13,7 @@ Base.metadata.create_all(bind=engine)
 # Safe migration: add preferred_language to existing databases
 with engine.connect() as _conn:
     _conn.execute(text(
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_language VARCHAR DEFAULT 'ko'"
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_language VARCHAR DEFAULT 'en'"
     ))
     _conn.commit()
 

@@ -17,7 +17,7 @@ class User(Base):
     rank = Column(String, default="Bronze")
     max_word_slots = Column(Integer, default=20)
 
-    preferred_language = Column(String, default="ko")
+    preferred_language = Column(String, default="en")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
