@@ -25,6 +25,12 @@ with engine.connect() as _conn:
     _conn.execute(text(
         "ALTER TABLE missions ADD COLUMN IF NOT EXISTS last_reset_date DATE"
     ))
+    _conn.execute(text(
+        "ALTER TABLE word_cards ADD COLUMN IF NOT EXISTS definition_translated VARCHAR"
+    ))
+    _conn.execute(text(
+        "ALTER TABLE word_cards ADD COLUMN IF NOT EXISTS def_trans_audio_path VARCHAR"
+    ))
     _conn.commit()
 
 app = FastAPI(
