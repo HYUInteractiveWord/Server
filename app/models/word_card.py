@@ -12,9 +12,11 @@ class WordCard(Base):
 
     korean_word = Column(String, nullable=False)
     pos = Column(String)                  # 품사: 명사, 동사, 형용사 등
-    definition = Column(String)           # 국립국어원 사전 뜻
+    definition = Column(String)
+    definition_translated = Column(String)  # translated definition text for selected language           # 국립국어원 사전 뜻
     example_sentences = Column(JSON)      # LLM 생성 예문 리스트
-    tts_audio_path = Column(String)       # TTS 파일 경로
+    tts_audio_path = Column(String)
+    def_trans_audio_path = Column(String)  # translated definition TTS file path       # TTS 파일 경로
 
     # 학습 현황
     level = Column(Integer, default=1)    # 1~5
