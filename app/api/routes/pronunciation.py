@@ -9,6 +9,7 @@ from pathlib import Path
 from app.db import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.models.word_card import WordCard
 from app.models.pronunciation_record import PronunciationRecord
 from app.schemas.pronunciation import PronunciationResponse
 from app.services.gamification import calculate_xp_gain
@@ -98,7 +99,32 @@ async def submit_pronunciation(
         )
         db.add(record)
 
-        xp_gained = calculate_xp_gain(final_score, is_new_best=True)
+        card = db.query(WordCard).filter(
+            WordCard.id == word_card_id,
+            WordCard.user_id == current_user.id,
+        ).first()
+
+        new_level = 1
+        if card:
+            card.speaking_count = (card.speaking_count or 0) + 1
+            if final_score > (card.best_score or 0.0):
+                card.best_score = final_score
+                if final_score >= 93:
+                    new_level = 5
+                elif final_score >= 85:
+                    new_level = 4
+                elif final_score >= 75:
+                    new_level = 3
+                elif final_score >= 60:
+                    new_level = 2
+                else:
+                    new_level = 1
+                card.level = new_level
+            else:
+                new_level = card.level or 1
+
+        is_new_best = card is not None and final_score >= (card.best_score or 0.0)
+        xp_gained = calculate_xp_gain(final_score, is_new_best=is_new_best)
         current_user.xp += xp_gained
 
         db.commit()
@@ -130,9 +156,9 @@ async def submit_pronunciation(
         return {
             "record_id": record.id,
             "score": float(final_score),
-            "is_new_best": True,
+            "is_new_best": is_new_best,
             "xp_gained": int(xp_gained),
-            "word_card_level": 0,
+            "word_card_level": new_level,
             "graphs": graph_data["graph_paths"],
 
             "details": {
