@@ -95,28 +95,37 @@ class KoreanLearningPipeline:
         return lang_map.get(target_language.lower(), "English (영어)")
 
     async def correct_stt_text(self, text: str) -> str:
-        """1. STT 텍스트 후보정 (비동기 처리)"""
+        """1. STT 텍스트 후보정 (비동기 처리) - 프롬프트 및 후처리 강화"""
+        if not text.strip():
+            return ""
+
         prompt = PromptTemplate.from_template(
             "당신은 한국어 음성 인식(STT) 오탈자 교정기입니다. 문맥을 추론하여 아예 다른 단어로 창조하지 마시고, 오직 '발음이 비슷하게 잘못 적힌 글자'만 올바른 맞춤법으로 고치세요.\n\n"
             "[예시]\n"
-            "원본: 이 아름다운 해바라기 죠화는 어디서 줴작한 거\n"
-            "보정본: 이 아름다운 해바라기 조화는 어디서 제작한 거\n"
-            "원본: 어제 칭구랑 가치 바블 머거따\n"
-            "보정본: 어제 친구랑 같이 밥을 먹었다\n\n"
+            "입력: 이 아름다운 해바라기 죠화는 어디서 줴작한 거\n"
+            "출력: 이 아름다운 해바라기 조화는 어디서 제작한 거\n\n"
             "[절대 규칙]\n"
             "1. 원본의 의미를 임의로 유추하여 완전히 다른 뜻의 단어로 바꾸면 절대 안 됩니다.\n"
             "2. 문장의 원래 의미와 시제를 100% 원본과 동일하게 유지하세요.\n"
-            "3. 다른 설명 없이 교정된 텍스트만 출력하세요.\n\n"
-            "원본: {text}\n보정본:"
+            "3. '원본:', '보정본:', '출력:' 등의 설명이나 접두사를 절대 붙이지 마세요. 오직 교정된 텍스트 딱 하나만 출력하세요.\n\n"
+            "입력: {text}\n출력:"
         )
         chain = prompt | self.llm
         try:
             response = await chain.ainvoke({"text": text})
-            return response.content.strip()
+            result = response.content.strip()
+            
+            for prefix in ["보정본:", "출력:", "원본:"]:
+                if prefix in result:
+                    result = result.split(prefix)[-1].strip()
+            
+            return result.replace('"', '').replace("'", "")
         except Exception as e:
             print(f"  [Error] STT correction failed: {e}", flush=True)
             return text
 
+
+    
     async def extract_core_vocabulary(self, text: str):
         """2. 핵심 어휘 추출 (비동기 처리 및 JSON 강제 프롬프트 강화)"""
         prompt = PromptTemplate.from_template(
@@ -516,16 +525,28 @@ class KoreanLearningPipeline:
         }
 
     async def verify_spoken_word(self, audio_bytes: bytes, ffmpeg_bin: str, whisper_model_size: str, target_word: str) -> dict:
+        """STT 추출 및 LLM 보정 후 타겟 단어 일치 여부 검증"""
         print(f"\n[Verification] '{target_word}' 음성 검증 시작...", flush=True)
         
         try:
             raw_text = await asyncio.to_thread(
                 extract_text_from_audio, audio_bytes, ffmpeg_bin, whisper_model_size
             )
+            raw_text = raw_text.strip()
             print(f"  -> STT 원문 (소음 정제 완료): {raw_text}", flush=True)
         except Exception as e:
             print(f"   STT 추출 실패: {e}", flush=True)
-            return {"is_match": False, "target_word": target_word, "spoken_raw": "", "spoken_corrected": ""}
+            return {"is_match": False, "target_word": target_word, "spoken_raw": "인식 오류", "spoken_corrected": ""}
+
+        word_count = len(raw_text.split())
+        if not raw_text or word_count >= 4:
+            print(f"  -> ⚠️ 무음 또는 환각 감지됨 (어절 수: {word_count}). 검증 실패 처리.", flush=True)
+            return {
+                "is_match": False,
+                "target_word": target_word,
+                "spoken_raw": "음성이 인식되지 않았거나 잡음입니다.",
+                "spoken_corrected": "다시 한 번 또렷하게 말씀해 주세요."
+            }
 
         corrected_text = await self.correct_stt_text(raw_text)
         print(f"  -> LLM 보정문: {corrected_text}", flush=True)
