@@ -46,7 +46,7 @@ if not exist .venv (
 
     python -c "import librosa" 2>nul || (
         echo New modules not found. Installing librosa, fastdtw, soundfile...
-        pip install librosa==0.10.1 fastdtw==0.3.4 soundfile==0.12.1
+        pip install librosa==0.10.1 fastdtw==0.3.4 soundfile==0.12.1 bcrypt==4.0.1
     )
     python -c "import matplotlib.pyplot" 2>nul || (
         echo New modules not found.

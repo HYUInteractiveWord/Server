@@ -18,6 +18,6 @@ class User(Base):
     max_word_slots = Column(Integer, default=20)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
+    preferred_language = Column(String, default="en")
     word_cards = relationship("WordCard", back_populates="user", cascade="all, delete-orphan")
     missions = relationship("Mission", back_populates="user", cascade="all, delete-orphan")
