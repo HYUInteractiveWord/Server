@@ -1,23 +1,29 @@
-from datetime import date, datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
-from app.db import get_db
 from app.api.deps import get_current_user
+from app.core.config import settings
+from app.db import get_db
+from app.models.mission import Mission
 from app.models.user import User
 from app.models.word_card import WordCard
-from app.models.mission import Mission
 from app.schemas.word_card import WordCardCreate, WordCardResponse
 from app.services.dictionary import fetch_word_info
-from app.services.tts import generate_tts
-from app.services.pipeline import KoreanLearningPipeline
-from app.core.config import settings
 from app.services.gamification import get_rank_for_xp, RANK_WORD_SLOTS
+from app.services.pipeline import KoreanLearningPipeline
+from app.services.tts import generate_tts
 
 
 router = APIRouter(prefix="/words", tags=["words"])
+
+nlp_pipeline = KoreanLearningPipeline(
+    term_api_key=settings.TERM_API_KEY,
+    dict_api_key=settings.DICT_API_KEY,
+    model_name=settings.LLM_MODEL_NAME,
+)
 
 QUIZ_MISSION_TYPE = "daily_word_quiz"
 COLLECT_NOUN_MISSION_TYPE = "daily_collect_noun"
@@ -40,6 +46,7 @@ class WordQuizResultRequest(BaseModel):
 
 def _effect_level_from_point(point: int) -> int:
     point = max(0, min(100, point))
+
     if point >= 100:
         return 4
     if point >= 76:
@@ -48,22 +55,24 @@ def _effect_level_from_point(point: int) -> int:
         return 2
     if point >= 26:
         return 1
+
     return 0
 
 
 def _is_noun_pos(pos: str | None) -> bool:
     if not pos:
         return False
+
     normalized = pos.strip().lower()
     return "명사" in normalized or normalized == "noun"
 
 
 def _refresh_user_rank_and_slots(user: User) -> None:
     new_rank = get_rank_for_xp(user.xp)
+
     if new_rank != user.rank:
         user.rank = new_rank
         user.max_word_slots = RANK_WORD_SLOTS[new_rank]
-
 
 
 def _increase_daily_mission_progress(
@@ -75,10 +84,14 @@ def _increase_daily_mission_progress(
     today = datetime.now(timezone(timedelta(hours=9))).date()
     fallback = DAILY_MISSION_FALLBACKS.get(mission_type)
 
-    mission = db.query(Mission).filter(
-        Mission.user_id == user_id,
-        Mission.mission_type == mission_type,
-    ).first()
+    mission = (
+        db.query(Mission)
+        .filter(
+            Mission.user_id == user_id,
+            Mission.mission_type == mission_type,
+        )
+        .first()
+    )
 
     if mission is None:
         if fallback is None:
@@ -114,6 +127,7 @@ def _increase_daily_mission_progress(
 
     return mission
 
+
 def _complete_mission_if_ready(mission: Mission | None, user: User) -> int:
     if mission is None:
         return 0
@@ -130,6 +144,7 @@ def _complete_mission_if_ready(mission: Mission | None, user: User) -> int:
         mission.completed_at = datetime.utcnow()
 
     reward = mission.xp_reward or 0
+
     if reward > 0:
         user.xp += reward
         _refresh_user_rank_and_slots(user)
@@ -137,23 +152,19 @@ def _complete_mission_if_ready(mission: Mission | None, user: User) -> int:
     return reward
 
 
-nlp_pipeline = KoreanLearningPipeline(
-    term_api_key=settings.TERM_API_KEY,
-    dict_api_key=settings.DICT_API_KEY,
-    model_name=settings.LLM_MODEL_NAME,
-)
-
-
 def _norm_path(path: str | None) -> str | None:
     if not path:
         return None
+
     return path.replace("\\", "/")
 
 
 def _normalize_target_language(language: str | None) -> str:
     lang = (language or "ko").strip().lower().split("-")[0]
+
     if lang in {"ru", "en", "ko"}:
         return lang
+
     return "ko"
 
 
@@ -176,8 +187,28 @@ def _pick_translated_definition(generated: dict) -> str | None:
     return None
 
 
+def _pick_def_trans_audio_path(generated: dict, audio: dict) -> str | None:
+    candidates = [
+        generated.get("def_trans_audio_path"),
+        generated.get("definition_trans_audio_path"),
+        generated.get("translated_definition_audio_path"),
+        generated.get("def_trans_tts"),
+        audio.get("def_trans_audio_path"),
+        audio.get("definition_trans_audio_path"),
+        audio.get("translated_definition_audio_path"),
+        audio.get("def_trans_tts"),
+    ]
+
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return _norm_path(value.strip())
+
+    return None
+
+
 def _merge_examples_with_tts(examples, example_tts_paths):
     merged = []
+    tts_paths = example_tts_paths or []
 
     for i, ex in enumerate(examples or []):
         if isinstance(ex, dict):
@@ -190,11 +221,14 @@ def _merge_examples_with_tts(examples, example_tts_paths):
                 "english": "",
             }
 
-        if i < len(example_tts_paths) and not item.get("tts_audio_path"):
-            item["tts_audio_path"] = _norm_path(example_tts_paths[i])
+        if i < len(tts_paths) and not item.get("tts_audio_path"):
+            item["tts_audio_path"] = _norm_path(tts_paths[i])
 
         if item.get("audio_path"):
             item["audio_path"] = _norm_path(item.get("audio_path"))
+
+        if item.get("tts_audio_path"):
+            item["tts_audio_path"] = _norm_path(item.get("tts_audio_path"))
 
         if item.get("trans_audio_path"):
             item["trans_audio_path"] = _norm_path(item.get("trans_audio_path"))
@@ -202,6 +236,8 @@ def _merge_examples_with_tts(examples, example_tts_paths):
         merged.append(item)
 
     return merged
+
+
 @router.get("/", response_model=list[WordCardResponse])
 def get_my_words(
     db: Session = Depends(get_db),
@@ -221,31 +257,41 @@ async def create_word_card(
     if not word:
         raise HTTPException(status_code=400, detail="Word is empty")
 
-    # 단어 슬롯 제한 체크
-    word_count = db.query(WordCard).filter(WordCard.user_id == current_user.id).count()
+    word_count = (
+        db.query(WordCard)
+        .filter(WordCard.user_id == current_user.id)
+        .count()
+    )
+
     if word_count >= current_user.max_word_slots:
         raise HTTPException(
             status_code=400,
             detail="Word slot limit reached. Complete missions to unlock more.",
         )
 
-    # 중복 체크
-    existing = db.query(WordCard).filter(
-        WordCard.user_id == current_user.id,
-        WordCard.korean_word == word,
-    ).first()
+    existing = (
+        db.query(WordCard)
+        .filter(
+            WordCard.user_id == current_user.id,
+            WordCard.korean_word == word,
+        )
+        .first()
+    )
 
     if existing:
         raise HTTPException(status_code=400, detail="Word already in your collection")
 
-    # 프론트에서 선택한 품사/뜻이 있으면 우선 사용하고, 없으면 사전 fallback 사용
     fallback_info = fetch_word_info(word)
+
     selected_info = {
         "pos": body.pos or fallback_info.get("pos") or "명사",
         "definition": body.definition or fallback_info.get("definition") or "",
     }
 
-    target_language = _normalize_target_language(current_user.preferred_language)
+    target_language = _normalize_target_language(
+        getattr(current_user, "preferred_language", None)
+    )
+
     generated = None
 
     try:
@@ -255,6 +301,7 @@ async def create_word_card(
             output_dir=user_output_dir,
             target_language=target_language,
         )
+
         if generated_cards:
             generated = generated_cards[0]
     except Exception as e:
@@ -262,25 +309,32 @@ async def create_word_card(
 
     if generated:
         audio = generated.get("audio", {}) or {}
+
         example_sentences = _merge_examples_with_tts(
             generated.get("examples", []),
             audio.get("examples_tts", []),
+        )
+
+        word_tts_path = (
+            audio.get("word_tts")
+            or generated.get("tts_audio_path")
+            or generated.get("audio_path")
         )
 
         card = WordCard(
             user_id=current_user.id,
             korean_word=word,
             source=body.source,
-            pos=generated.get("pos_type") or selected_info["pos"],
+            pos=generated.get("pos_type") or generated.get("pos") or selected_info["pos"],
             definition=generated.get("definition_korean") or selected_info["definition"],
             definition_translated=_pick_translated_definition(generated),
             example_sentences=example_sentences,
-            tts_audio_path=_norm_path(audio.get("word_tts")),
-            def_trans_audio_path=_norm_path(audio.get("def_trans_audio_path") or audio.get("def_trans_tts")),
+            tts_audio_path=_norm_path(word_tts_path),
+            def_trans_audio_path=_pick_def_trans_audio_path(generated, audio),
         )
     else:
-        # LLM/Gemma 서버 문제 발생 시 최소 fallback 저장
         tts_path = generate_tts(word)
+
         card = WordCard(
             user_id=current_user.id,
             korean_word=word,
@@ -306,9 +360,8 @@ async def create_word_card(
 
     db.commit()
     db.refresh(card)
+
     return card
-
-
 
 
 @router.post("/quiz-result")
@@ -339,10 +392,14 @@ def submit_word_quiz_result(
 
         seen_word_ids.add(result.word_id)
 
-        card = db.query(WordCard).filter(
-            WordCard.id == result.word_id,
-            WordCard.user_id == current_user.id,
-        ).first()
+        card = (
+            db.query(WordCard)
+            .filter(
+                WordCard.id == result.word_id,
+                WordCard.user_id == current_user.id,
+            )
+            .first()
+        )
 
         if card is None:
             continue
@@ -368,7 +425,6 @@ def submit_word_quiz_result(
     perfect_bonus = 10 if valid_count >= 3 and correct_count == valid_count else 0
     quiz_score = correct_count * 10 + perfect_bonus
 
-    # 현재 정책: 퀴즈 정답은 단어별 word_point가 아니라 유저 전체 XP에만 반영
     quiz_xp_gained = correct_count * 10
     current_user.xp += quiz_xp_gained
     _refresh_user_rank_and_slots(current_user)
@@ -405,9 +461,10 @@ def submit_word_quiz_result(
             "target": mission.target,
             "is_completed": mission.is_completed,
             "xp_reward": mission.xp_reward,
-        } if mission else None,
+        }
+        if mission
+        else None,
     }
-
 
 
 @router.get("/{word_id}", response_model=WordCardResponse)
@@ -416,10 +473,14 @@ def get_word_card(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    card = db.query(WordCard).filter(
-        WordCard.id == word_id,
-        WordCard.user_id == current_user.id,
-    ).first()
+    card = (
+        db.query(WordCard)
+        .filter(
+            WordCard.id == word_id,
+            WordCard.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if not card:
         raise HTTPException(status_code=404, detail="Word card not found")
@@ -433,10 +494,14 @@ def delete_word_card(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    card = db.query(WordCard).filter(
-        WordCard.id == word_id,
-        WordCard.user_id == current_user.id,
-    ).first()
+    card = (
+        db.query(WordCard)
+        .filter(
+            WordCard.id == word_id,
+            WordCard.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if not card:
         raise HTTPException(status_code=404, detail="Word card not found")
