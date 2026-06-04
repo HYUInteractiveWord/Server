@@ -163,7 +163,7 @@ async def submit_pronunciation(
 
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
-                "formant": float(detailed_scores["formant_score"]),
+                "formant": float(detailed_scores["phoneme_score"]),
                 "pitch": float(detailed_scores["pitch_score"]),
                 "timing": float(detailed_scores["duration_score"]),
                 "is_intensity_good": bool(detailed_scores["intensity_pass"])
@@ -256,7 +256,7 @@ async def evaluate_pronunciation_test(
 
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
-                "formant": float(detailed_scores["formant_score"]),
+                "formant": float(detailed_scores["phoneme_score"]),
                 "pitch": float(detailed_scores["pitch_score"]),
                 "timing": float(detailed_scores["duration_score"]),
                 "is_intensity_good": bool(detailed_scores["intensity_pass"])
