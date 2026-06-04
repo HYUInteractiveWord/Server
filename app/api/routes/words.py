@@ -408,14 +408,16 @@ def submit_word_quiz_result(
 
         if result.is_correct:
             correct_count += 1
+            card.word_point = (card.word_point or 0) + 10
+            card.effect_level = _effect_level_from_point(card.word_point)
 
         checked_words.append(
             {
                 "id": card.id,
                 "korean_word": card.korean_word,
                 "is_correct": result.is_correct,
-                "word_point": card.word_point or 0,
-                "effect_level": card.effect_level or 0,
+                "word_point": card.word_point,  
+                "effect_level": card.effect_level, 
             }
         )
 
@@ -424,7 +426,6 @@ def submit_word_quiz_result(
 
     perfect_bonus = 10 if valid_count >= 3 and correct_count == valid_count else 0
     quiz_score = correct_count * 10 + perfect_bonus
-
     quiz_xp_gained = correct_count * 10
     current_user.xp += quiz_xp_gained
     _refresh_user_rank_and_slots(current_user)
