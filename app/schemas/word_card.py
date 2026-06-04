@@ -7,7 +7,8 @@ class WordCardCreate(BaseModel):
     korean_word: str
     source: str = "dictionary"  # "scan" | "dictionary"
     pos: Optional[str] = None
-    definition: Optional[str] = None
+    definition: Optional[str]
+    definition_translated: Optional[str] = None
 
 
 class WordCardResponse(BaseModel):
@@ -15,12 +16,12 @@ class WordCardResponse(BaseModel):
     korean_word: str
     pos: Optional[str]
     definition: Optional[str]
-    definition_english: Optional[str] = None 
+    definition_english: Optional[str] = None
     pronunciation: Optional[str] = None
-    def_trans_audio_path: Optional[str] = None
-    
+    definition_translated: Optional[str] = None
     example_sentences: Optional[list]
     tts_audio_path: Optional[str]
+    def_trans_audio_path: Optional[str] = None
     level: int
     best_score: float
     scan_count: int

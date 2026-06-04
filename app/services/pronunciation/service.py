@@ -15,7 +15,7 @@ from .scoring import (
     pitch_similarity_scores,
     duration_similarity_score,
     intensity_similarity_score,
-    formant_similarity_score,
+    phoneme_similarity_score,
     calculate_final_score,
 )
 from .visualization import (
@@ -86,9 +86,9 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         y_usr_pitch,
     )
 
-    formant_result = formant_similarity_score(
+    phoneme_result = phoneme_similarity_score(
         y_ref_pitch, sr_ref,
-        y_usr_pitch, sr_usr,
+        y_usr_pitch, sr_usr
     )
 
     # 강세(intensity)는 P/F로만 판단하므로 최종 점수(final_score) 계산에서 제외
@@ -97,7 +97,7 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         pronunciation_score=pron_result["score"],
         pitch_score=pitch_result["pitch_score"],
         duration_score=duration_result["duration_score"],
-        formant_score=formant_result["formant_score"],
+        phoneme_score=phoneme_result["phoneme_score"],
     )
 
     return {
@@ -117,7 +117,7 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         
         "details": {
             "pronunciation": float(pron_result["score"]),
-            "formant": float(formant_result["formant_score"]),
+            "phoneme": float(phoneme_result["phoneme_score"]),
             "pitch": float(pitch_result["pitch_score"]),
             "timing": float(duration_result["duration_score"]),
             "is_intensity_good": intensity_result["is_pass"]
@@ -135,7 +135,7 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
             "pronunciation_score": float(pron_result["score"]),
             "pitch_score": float(pitch_result["pitch_score"]),
             "duration_score": float(duration_result["duration_score"]),
-            "formant_score": float(formant_result["formant_score"]),
+            "phoneme_score": float(phoneme_result["phoneme_score"]),
             "intensity_pass": intensity_result["is_pass"],          
             "final_score": float(final_score),
         },
@@ -149,7 +149,7 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         },
         "duration_detail": duration_result,
         "intensity_detail": intensity_result,
-        "formant_detail": formant_result,
+        "phoneme_detail": phoneme_result,
         
         # 서버에서 이미지 그릴 때 사용하는 데이터
         "plot_data": {

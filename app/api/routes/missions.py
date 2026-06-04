@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -19,25 +19,46 @@ DAILY_MISSION_TEMPLATES = [
 ]
 
 
+
 def _get_or_create_daily_missions(user_id: int, db: Session) -> list[Mission]:
-    today = date.today()
+    today = datetime.now(timezone(timedelta(hours=9))).date()
     mission_types = [t["mission_type"] for t in DAILY_MISSION_TEMPLATES]
 
     existing = db.query(Mission).filter(
         Mission.user_id == user_id,
         Mission.mission_type.in_(mission_types),
-        func.date(Mission.created_at) == today,
     ).all()
 
-    existing_by_type = {m.mission_type: m for m in existing}
-    missions = list(existing)
+    existing_by_type = {mission.mission_type: mission for mission in existing}
+    missions: list[Mission] = []
 
     for template in DAILY_MISSION_TEMPLATES:
         mission_type = template["mission_type"]
-        if mission_type not in existing_by_type:
-            mission = Mission(user_id=user_id, **template)
+        mission = existing_by_type.get(mission_type)
+
+        if mission is None:
+            mission = Mission(
+                user_id=user_id,
+                mission_type=mission_type,
+                target=template["target"],
+                xp_reward=template["xp_reward"],
+                progress=0,
+                is_completed=False,
+                completed_at=None,
+                last_reset_date=today,
+            )
             db.add(mission)
-            missions.append(mission)
+        else:
+            if mission.last_reset_date != today:
+                mission.progress = 0
+                mission.is_completed = False
+                mission.completed_at = None
+                mission.last_reset_date = today
+
+            mission.target = template["target"]
+            mission.xp_reward = template["xp_reward"]
+
+        missions.append(mission)
 
     db.commit()
 
@@ -48,16 +69,15 @@ def _get_or_create_daily_missions(user_id: int, db: Session) -> list[Mission]:
         missions,
         key=lambda m: mission_types.index(m.mission_type)
         if m.mission_type in mission_types
-        else 999,
+        else len(mission_types),
     )
-
 
 @router.get("/", response_model=list[MissionResponse])
 def get_my_missions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return db.query(Mission).filter(Mission.user_id == current_user.id).all()
+    return _get_or_create_daily_missions(current_user.id, db)
 
 
 @router.get("/daily", response_model=list[MissionResponse])

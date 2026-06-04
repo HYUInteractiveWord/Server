@@ -12,7 +12,6 @@ from app.schemas.scans import AudioScanRequest, AudioScanResponse
 from app.core.config import settings
 
 from app.services.pipeline import extract_text_from_audio, KoreanLearningPipeline
-from app.services.ytdlp import extract_youtube_audio
 
 router = APIRouter(prefix="/scan", tags=["scan"])
 
@@ -110,32 +109,17 @@ async def process_scan_result(
 
 
 class YouTubeScanRequest(BaseModel):
-    url: str
-    end_sec: float
-    duration_sec: float = 10.0
+    transcript_text: str
 
 
 @router.post("/youtube")
 async def scan_youtube(req: YouTubeScanRequest):
-    """
-    [Live 모드] YouTube URL + 재생 타임스탬프 → yt-dlp로 구간 추출 → STT + 어휘 분석
-    end_sec: 현재 재생 위치(초), duration_sec: 캡처 길이(기본 10초)
-    """
-    try:
-        audio_bytes = await extract_youtube_audio(req.url, req.end_sec, req.duration_sec)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"오디오 추출 실패: {e}")
-
-    raw_text = extract_text_from_audio(
-        audio_bytes=audio_bytes,
-        ffmpeg_bin=settings.FFMPEG_BIN,
-        whisper_model_size=settings.WHISPER_MODEL,
-    )
-    result = await nlp_pipeline.phase1_analyze(raw_text)
+    """Android에서 직접 추출한 YouTube 자막 텍스트 → LLM 어휘 분석"""
+    result = await nlp_pipeline.phase1_analyze(req.transcript_text)
 
     return {
-        "scan_source": "youtube_live",
-        "raw_text": raw_text,
+        "scan_source": "youtube_transcript",
+        "raw_text": req.transcript_text,
         "corrected_text": result["corrected_text"],
         "llm_raw_output": result["llm_raw_output"],
         "extracted_words": result["extracted_words"],

@@ -6,6 +6,7 @@ class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
+    preferred_language: str = "en"
 
 
 class UserLogin(BaseModel):
@@ -20,6 +21,7 @@ class UserResponse(BaseModel):
     xp: int
     rank: str
     max_word_slots: int
+    preferred_language: str = "en"
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

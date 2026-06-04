@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -65,22 +65,22 @@ def _refresh_user_rank_and_slots(user: User) -> None:
         user.max_word_slots = RANK_WORD_SLOTS[new_rank]
 
 
+
 def _increase_daily_mission_progress(
     db: Session,
     user_id: int,
     mission_type: str,
     amount: int = 1,
 ) -> Mission | None:
-    today = date.today()
+    today = datetime.now(timezone(timedelta(hours=9))).date()
+    fallback = DAILY_MISSION_FALLBACKS.get(mission_type)
 
     mission = db.query(Mission).filter(
         Mission.user_id == user_id,
         Mission.mission_type == mission_type,
-        func.date(Mission.created_at) == today,
     ).first()
 
     if mission is None:
-        fallback = DAILY_MISSION_FALLBACKS.get(mission_type)
         if fallback is None:
             return None
 
@@ -89,9 +89,22 @@ def _increase_daily_mission_progress(
             mission_type=mission_type,
             target=fallback["target"],
             xp_reward=fallback["xp_reward"],
+            progress=0,
+            is_completed=False,
+            completed_at=None,
+            last_reset_date=today,
         )
         db.add(mission)
-        db.flush()
+    else:
+        if mission.last_reset_date != today:
+            mission.progress = 0
+            mission.is_completed = False
+            mission.completed_at = None
+            mission.last_reset_date = today
+
+        if fallback is not None:
+            mission.target = fallback["target"]
+            mission.xp_reward = fallback["xp_reward"]
 
     if not mission.is_completed:
         mission.progress = min(
@@ -100,7 +113,6 @@ def _increase_daily_mission_progress(
         )
 
     return mission
-
 
 def _complete_mission_if_ready(mission: Mission | None, user: User) -> int:
     if mission is None:
@@ -138,14 +150,39 @@ def _norm_path(path: str | None) -> str | None:
     return path.replace("\\", "/")
 
 
-def _merge_examples_with_tts(examples: list | None, example_tts_paths: list | None) -> list:
-    merged = []
-    examples = examples or []
-    example_tts_paths = example_tts_paths or []
+def _normalize_target_language(language: str | None) -> str:
+    lang = (language or "ko").strip().lower().split("-")[0]
+    if lang in {"ru", "en", "ko"}:
+        return lang
+    return "ko"
 
-    for i, ex in enumerate(examples):
+
+def _pick_translated_definition(generated: dict) -> str | None:
+    candidates = [
+        generated.get("definition_translated"),
+        generated.get("translated_definition"),
+        generated.get("translated_def_text"),
+        generated.get("definition_target"),
+        generated.get("definition_ru"),
+        generated.get("def_translated"),
+        generated.get("def_translation"),
+        generated.get("meaning_translated"),
+    ]
+
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return None
+
+
+def _merge_examples_with_tts(examples, example_tts_paths):
+    merged = []
+
+    for i, ex in enumerate(examples or []):
         if isinstance(ex, dict):
             item = dict(ex)
+            item.setdefault("type", "llm_generated")
         else:
             item = {
                 "type": "fallback",
@@ -153,14 +190,18 @@ def _merge_examples_with_tts(examples: list | None, example_tts_paths: list | No
                 "english": "",
             }
 
-        if i < len(example_tts_paths):
+        if i < len(example_tts_paths) and not item.get("tts_audio_path"):
             item["tts_audio_path"] = _norm_path(example_tts_paths[i])
+
+        if item.get("audio_path"):
+            item["audio_path"] = _norm_path(item.get("audio_path"))
+
+        if item.get("trans_audio_path"):
+            item["trans_audio_path"] = _norm_path(item.get("trans_audio_path"))
 
         merged.append(item)
 
     return merged
-
-
 @router.get("/", response_model=list[WordCardResponse])
 def get_my_words(
     db: Session = Depends(get_db),
@@ -204,6 +245,7 @@ async def create_word_card(
         "definition": body.definition or fallback_info.get("definition") or "",
     }
 
+    target_language = _normalize_target_language(current_user.preferred_language)
     generated = None
 
     try:
@@ -211,6 +253,7 @@ async def create_word_card(
         generated_cards = await nlp_pipeline.phase2_generate(
             selected_words={word: selected_info},
             output_dir=user_output_dir,
+            target_language=target_language,
         )
         if generated_cards:
             generated = generated_cards[0]
@@ -230,8 +273,10 @@ async def create_word_card(
             source=body.source,
             pos=generated.get("pos_type") or selected_info["pos"],
             definition=generated.get("definition_korean") or selected_info["definition"],
+            definition_translated=_pick_translated_definition(generated),
             example_sentences=example_sentences,
             tts_audio_path=_norm_path(audio.get("word_tts")),
+            def_trans_audio_path=_norm_path(audio.get("def_trans_audio_path") or audio.get("def_trans_tts")),
         )
     else:
         # LLM/Gemma 서버 문제 발생 시 최소 fallback 저장
@@ -242,8 +287,10 @@ async def create_word_card(
             source=body.source,
             pos=selected_info["pos"],
             definition=selected_info["definition"],
+            definition_translated=None,
             example_sentences=fallback_info.get("examples", []),
             tts_audio_path=_norm_path(tts_path),
+            def_trans_audio_path=None,
         )
 
     db.add(card)

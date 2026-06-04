@@ -148,14 +148,18 @@ def extract_mfcc(y, sr: int, n_mfcc: int = 13):
     """
     MFCC 추출 + 전역 정규화
     """
-    mfcc = librosa.feature.mfcc(
-        y=y,
-        sr=sr,
-        n_mfcc=n_mfcc,
-    )
-
-    mfcc = (mfcc - np.mean(mfcc)) / (np.std(mfcc) + 1e-6)
-    return mfcc
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+    
+    delta = librosa.feature.delta(mfcc)
+    delta2 = librosa.feature.delta(mfcc, order=2)
+    
+    mfcc_combined = np.vstack([mfcc, delta, delta2])
+    
+    mean = np.mean(mfcc_combined, axis=1, keepdims=True)
+    std = np.std(mfcc_combined, axis=1, keepdims=True)
+    mfcc_norm = (mfcc_combined - mean) / (std + 1e-6)
+    
+    return mfcc_norm
 
 
 def extract_pitch(y, sr: int, fmin: str = "C2", fmax: str = "G5"):
@@ -270,33 +274,57 @@ def align_contours_by_cross_correlation(f0_ref, f0_usr, target_len: int = 200):
     return ref_n, usr_n, usr_shifted, int(shift)
 
 
-def extract_formants_lpc(y, sr: int):
+def extract_formant_sequence(y, sr: int, hop_length: int = 512):
     """
-    LPC(Linear Predictive Coding)를 사용하여 오디오의 평균 포먼트(F1, F2)를 추출합니다.
-    모음 발음의 정확도(혀의 높낮이, 입술의 둥글기 등)를 평가하는 데 사용됩니다.
+    [V2 업데이트] 오디오를 프레임 단위로 쪼개어 시간에 따른 F1, F2 모음 변화의 '흐름'을 추출합니다.
     """
     y_preemp = librosa.effects.preemphasis(y)
-
+    frames = librosa.util.frame(y_preemp, frame_length=1024, hop_length=hop_length)
+    
+    f1_list, f2_list = [], []
     order = 16
     
-    if len(y_preemp) < order:
-        return {"F1": 0.0, "F2": 0.0}
+    for i in range(frames.shape[1]):
+        frame = frames[:, i]
+        frame = frame * np.hanning(len(frame))
+        
+        # 무음 구간은 0으로 처리
+        if np.sum(np.abs(frame)) < 1e-4:
+            f1_list.append(0.0)
+            f2_list.append(0.0)
+            continue
+            
+        a = librosa.lpc(frame, order=order)
+        roots = np.roots(a)
+        roots = [r for r in roots if np.imag(r) > 0]
+        angles = np.arctan2(np.imag(roots), np.real(roots))
+        freqs = angles * (sr / (2 * np.pi))
+        freqs = sorted([f for f in freqs if f > 90])
+        
+        f1_list.append(freqs[0] if len(freqs) > 0 else 0.0)
+        f2_list.append(freqs[1] if len(freqs) > 1 else 0.0)
+        
+    return np.array(f1_list), np.array(f2_list)
 
-    a = librosa.lpc(y_preemp, order=order)
 
-    roots = np.roots(a)
-
-    roots = [r for r in roots if np.imag(r) > 0]
-
-    angles = np.arctan2(np.imag(roots), np.real(roots))
-    freqs = angles * (sr / (2 * np.pi))
-
-    freqs = sorted([f for f in freqs if f > 90])
-
-    f1 = freqs[0] if len(freqs) > 0 else 0.0
-    f2 = freqs[1] if len(freqs) > 1 else 0.0
-
-    return {
-        "F1": float(f1),
-        "F2": float(f2)
-    }
+def extract_plosive_sequence(y, sr: int):
+    """
+    [V2 업데이트] 파열음이 '어느 타이밍'에 터졌는지 시계열 배열로 반환합니다.
+    """
+    S = np.abs(librosa.stft(y))
+    freqs = librosa.fft_frequencies(sr=sr)
+    
+    # 3000Hz 이상 고주파 대역 필터링
+    high_freq_idx = np.where(freqs > 3000)[0]
+    if len(high_freq_idx) == 0:
+        return np.zeros(S.shape[1])
+        
+    S_high = S[high_freq_idx, :]
+    
+    # 타격감(Onset Strength) 추출
+    onset_env = librosa.onset.onset_strength(
+        S=librosa.amplitude_to_db(S_high, ref=np.max), 
+        sr=sr
+    )
+    
+    return onset_env

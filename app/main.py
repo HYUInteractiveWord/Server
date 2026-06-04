@@ -1,13 +1,37 @@
+import types as _types
+import bcrypt as _bcrypt
+# passlib 1.7.4 + bcrypt 4.x 호환 패치 (bcrypt 4.x에서 __about__ 제거됨)
+if not hasattr(_bcrypt, '__about__'):
+    _bcrypt.__about__ = _types.ModuleType('bcrypt.__about__')
+    _bcrypt.__about__.__version__ = _bcrypt.__version__
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse # 추가
+from fastapi.responses import FileResponse
 from pathlib import Path
 
+from sqlalchemy import text
 from app.db import Base, engine
 from app.api.routes import auth, words, scan, pronunciation, missions, dictionary
 
 Base.metadata.create_all(bind=engine)
+
+# Safe migrations
+with engine.connect() as _conn:
+    _conn.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_language VARCHAR DEFAULT 'en'"
+    ))
+    _conn.execute(text(
+        "ALTER TABLE missions ADD COLUMN IF NOT EXISTS last_reset_date DATE"
+    ))
+    _conn.execute(text(
+        "ALTER TABLE word_cards ADD COLUMN IF NOT EXISTS definition_translated VARCHAR"
+    ))
+    _conn.execute(text(
+        "ALTER TABLE word_cards ADD COLUMN IF NOT EXISTS def_trans_audio_path VARCHAR"
+    ))
+    _conn.commit()
 
 app = FastAPI(
     title="InteractiveWord API",

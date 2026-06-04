@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from app.db import get_db
 from app.api.deps import get_current_user
@@ -18,6 +18,21 @@ nlp_pipeline = KoreanLearningPipeline(
     dict_api_key=settings.DICT_API_KEY, 
     model_name=settings.LLM_MODEL_NAME
 )
+
+def _normalize_target_language(language: str | None) -> str:
+    lang = (language or "ko").strip().lower().split("-")[0]
+    if lang in {"ko", "ru", "en"}:
+        return lang
+    return "ko"
+
+
+def _source_lang_for_target(language: str) -> str:
+    if language == "ru":
+        return "러시아어"
+    if language == "en":
+        return "영어"
+    return "한국어"
+
 
 # ==========================================
 # Pydantic Schemas
@@ -38,7 +53,8 @@ class PreviewRequest(BaseModel):
 @router.get("/search")
 async def search_dictionary(
     word: str = Query(..., min_length=1, description="검색할 단어"),
-    source_lang: str = Query("한국어", description="입력 언어 지정"),
+    source_lang: Optional[str] = Query(None, description="입력 언어 지정"),
+    current_user: User = Depends(get_current_user),
 ):
     """
     통합 사전 검색 API.
@@ -50,6 +66,9 @@ async def search_dictionary(
     if not word:
         raise HTTPException(status_code=400, detail="검색어를 입력해주세요.")
 
+    target_language = _normalize_target_language(current_user.preferred_language)
+    effective_source_lang = source_lang or _source_lang_for_target(target_language)
+
     # 1. 한국어 단어 정보 조회
     word_info = fetch_word_info(word)
 
@@ -58,10 +77,58 @@ async def search_dictionary(
     try:
         candidates = await nlp_pipeline.search_dictionary_candidates(
             query=word,
-            source_lang=source_lang,
+            source_lang=effective_source_lang,
         )
     except Exception as e:
         print(f"[Dict Search] candidate search failed: {e}")
+
+
+    candidate_map = {}
+
+    for candidate in candidates or []:
+        if isinstance(candidate, dict):
+            candidate_word = (
+                candidate.get("word")
+                or candidate.get("korean_word")
+                or candidate.get("korean")
+                or candidate.get("lemma")
+                or ""
+            )
+            candidate_word = str(candidate_word).strip()
+
+            item = {
+                "pos": candidate.get("pos") or candidate.get("pos_type"),
+                "definition": candidate.get("definition") or "",
+            }
+        else:
+            candidate_word = str(candidate).strip()
+            fetched = fetch_word_info(candidate_word) if candidate_word else {}
+            item = {
+                "pos": fetched.get("pos"),
+                "definition": fetched.get("definition") or "",
+            }
+
+        if not candidate_word:
+            continue
+
+        if target_language != "ko" and item.get("definition"):
+            try:
+                preview = await nlp_pipeline.generate_word_preview(
+                    word=candidate_word,
+                    definition=item.get("definition") or "",
+                    pos=item.get("pos") or "",
+                    output_dir="static/tts/temp",
+                    target_language=target_language,
+                )
+                item["definition_translated"] = preview.get("definition_translated")
+                item["pronunciation"] = preview.get("pronunciation")
+                item["def_trans_audio_path"] = preview.get("def_trans_audio_path")
+            except Exception as e:
+                print(f"[Dict Search] translate preview failed for '{candidate_word}': {e}", flush=True)
+
+        candidate_map[candidate_word] = item
+
+    candidates = candidate_map
 
     return {
         # 프론트용 필드
