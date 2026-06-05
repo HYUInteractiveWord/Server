@@ -123,12 +123,5 @@ async def create_demo_user_and_login(
                 def_trans_audio_path=def_tts.replace("\\", "/") if def_tts else None,
             )
             db.add(new_card)
-        db.commit()
-
-    access_token = create_access_token(data={"sub": user.username})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "message": "데모 계정이 성공적으로 생성되었습니다."
-    }
+        db.commit()   
+    return user
