@@ -125,3 +125,23 @@ async def create_demo_user_and_login(
             db.add(new_card)
         db.commit()   
     return user
+@router.delete("/delete")
+def delete_current_user(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    db.delete(current_user)
+    db.commit()
+    return {"message": "User deleted successfully"}
+@router.patch("/delete", response_model=UserResponse)
+def update_user_info(
+    body: dict, 
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if "preferred_language" in body:
+        new_lang = body["preferred_language"]
+        current_user.preferred_language = new_lang
+        
+        db.query(WordCard).filter(WordCard.user_id == current_user.id).delete()
+        
+    db.commit()
+    db.refresh(current_user)
+    return current_user
