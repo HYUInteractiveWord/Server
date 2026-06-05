@@ -4,7 +4,7 @@ from datetime import datetime
 
 class UserCreate(BaseModel):
     username: str
-    email: EmailStr
+    email: Optional[EmailStr] = None
     password: str
     preferred_language: str = "en"
 

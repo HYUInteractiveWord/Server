@@ -31,6 +31,8 @@ with engine.connect() as _conn:
     _conn.execute(text(
         "ALTER TABLE word_cards ADD COLUMN IF NOT EXISTS def_trans_audio_path VARCHAR"
     ))
+    _conn.execute(text("ALTER TABLE users ALTER COLUMN email DROP NOT NULL"))
+    _conn.execute(text("ALTER TABLE word_cards ADD COLUMN pronunciation VARCHAR"))
     _conn.commit()
 
 app = FastAPI(
