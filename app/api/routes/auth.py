@@ -57,3 +57,73 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.post("/demo")
+async def create_demo_user_and_login(
+    preferred_language: str = "en",
+    db: Session = Depends(get_db)
+):
+    """
+    [앱 연동용] 데모 유저를 즉시 생성하고 10000 XP를 부여한 뒤, 
+    해당 언어의 데모 단어장을 이식하고 바로 로그인할 수 있는 토큰을 반환합니다.
+    """
+    # 1. 묻지도 따지지도 않고 데모 유저 신규 생성
+    demo_name = f"demo_{uuid.uuid4().hex[:6]}"
+    
+    new_user = User(
+        username=demo_name,
+        email=f"{demo_name}@demo.com",
+        hashed_password=get_password_hash("demo_dummy_password"), 
+        preferred_language=preferred_language,
+        xp=10000,
+        rank="Emerald",       # 10000 XP에 해당하는 랭크 강제 주입
+        max_word_slots=100    # 랭크업 슬롯(100개) 강제 주입
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    # 2. 언어별 경로 설정 로직
+    target_lang = preferred_language.strip().lower().split("-")[0]
+    if target_lang not in ["ru", "en", "ko"]:
+        target_lang = "ko"
+        
+    demo_dir = f"assets/demo_data/{target_lang}"
+    all_vocab_path = os.path.join(demo_dir, "all_vocab_cards.json")
+    
+    # 안전장치: 폴더가 없으면 기본 경로 사용
+    if not os.path.exists(all_vocab_path):
+        all_vocab_path = "assets/demo_data/all_vocab_cards.json"
+        
+    # 3. 데모 단어장 DB에 이식하기
+    if os.path.exists(all_vocab_path):
+        with open(all_vocab_path, "r", encoding="utf-8") as f:
+            cards_data = json.load(f)
+            
+        for data in cards_data:
+            audio = data.get("audio", {})
+            word_tts = audio.get("word_tts", "")
+            def_tts = audio.get("def_trans_tts", "")
+            
+            new_card = WordCard(
+                user_id=new_user.id,
+                korean_word=data.get("word"),
+                source="demo",
+                pos=data.get("pos_type"),
+                definition=data.get("definition_korean"),
+                definition_translated=data.get("definition_translated"),
+                pronunciation=data.get("pronunciation"),
+                example_sentences=data.get("examples", []),
+                tts_audio_path=word_tts.replace("\\", "/") if word_tts else None,
+                def_trans_audio_path=def_tts.replace("\\", "/") if def_tts else None,
+            )
+            db.add(new_card)
+        db.commit()
+
+    access_token = create_access_token(data={"sub": new_user.username})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "message": "데모 계정이 성공적으로 생성되었습니다."
+    }
