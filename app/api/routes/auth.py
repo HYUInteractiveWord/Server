@@ -10,7 +10,7 @@ from app.models.word_card import WordCard
 import uuid
 import os
 import json
-import datetime
+from datetime import datetime, timezone, timedelta
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 INITIAL_DAILY_MISSIONS = [
