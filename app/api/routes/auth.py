@@ -11,6 +11,7 @@ import uuid
 import os
 import json
 from datetime import datetime, timezone, timedelta
+import shutil
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 INITIAL_DAILY_MISSIONS = [
@@ -105,7 +106,10 @@ async def create_demo_user_and_login(
         all_vocab_path = "assets/demo_data/all_vocab_cards.json"
         
     if os.path.exists(demo_dir):
-        # os.walk는 하위 폴더를 모두 뒤집니다
+        # 유저 전용 기본 디렉토리 설정
+        user_base_dir = os.path.join("static", "tts", f"user_{user.id}")
+        os.makedirs(user_base_dir, exist_ok=True)
+
         for root, dirs, files in os.walk(demo_dir):
             for file in files:
                 if file.endswith(".json"):
@@ -114,43 +118,76 @@ async def create_demo_user_and_login(
                     
                     try:
                         with open(file_path, "r", encoding="utf-8") as f:
-                            # 구조가 리스트인지 확인
                             data_content = json.load(f)
-                            # 파일 구조에 따라 리스트로 변환 (파일마다 다를 수 있으니 주의)
                             cards_data = data_content if isinstance(data_content, list) else [data_content]
                             
                         for data in cards_data:
+                            word = data.get("word")
+                            if not word: continue
+
                             # 중복 체크
                             if db.query(WordCard).filter(
                                 WordCard.user_id == user.id,
-                                WordCard.korean_word == data.get("word")
+                                WordCard.korean_word == word
                             ).first():
                                 continue
 
+                            # 1. 단어별 폴더 생성 (static/tts/user_{id}/단어/)
+                            word_dir = os.path.join(user_base_dir, word)
+                            os.makedirs(word_dir, exist_ok=True)
+
+                            # 2. 오디오 파일 복사 및 경로 변환 함수
+                            def copy_and_get_new_path(original_path_str):
+                                if not original_path_str: return None
+                                # 소스 파일 절대 경로 추정 (demo_dir 기반)
+                                src_path = os.path.normpath(original_path_str)
+                                if not os.path.exists(src_path):
+                                    print(f"  WARNING: 원본 파일 없음 -> {src_path}")
+                                    return None
+                                
+                                # 복사할 파일명 (예: 승차_word.mp3)
+                                filename = os.path.basename(original_path_str)
+                                dest_path = os.path.join(word_dir, filename)
+                                
+                                # 복사 수행
+                                shutil.copy2(src_path, dest_path)
+                                # DB에 저장될 경로 (static/... 으로 시작하는 상대 경로)
+                                return dest_path.replace("\\", "/")
+
                             # 오디오 파일 처리
                             audio = data.get("audio", {})
-                            word_tts = audio.get("word_tts", "")
-                            def_tts = audio.get("def_trans_tts", "")
+                            word_tts = copy_and_get_new_path(audio.get("word_tts"))
+                            def_tts = copy_and_get_new_path(audio.get("def_trans_tts"))
                             
+                            # 예문 오디오 처리
+                            examples_data = data.get("examples", [])
+                            # 예문 오디오도 있다면 동일하게 복사하여 경로 교체
+                            for ex in examples_data:
+                                if isinstance(ex, dict):
+                                    if ex.get("audio_path"):
+                                        ex["audio_path"] = copy_and_get_new_path(ex["audio_path"])
+                                    if ex.get("trans_audio_path"):
+                                        ex["trans_audio_path"] = copy_and_get_new_path(ex["trans_audio_path"])
+
+                            # DB 레코드 생성
                             new_card = WordCard(
                                 user_id=user.id,
-                                korean_word=data.get("word"),
+                                korean_word=word,
                                 source="demo",
                                 pos=data.get("pos_type"),
                                 definition=data.get("definition_korean"),
                                 definition_translated=data.get("definition_translated"),
                                 pronunciation=data.get("pronunciation"),
-                                example_sentences=data.get("examples", []),
-                                # 폴더 경로 기반으로 오디오 경로 정규화 (필요시 경로 조정)
-                                tts_audio_path=word_tts.replace("\\", "/") if word_tts else None,
-                                def_trans_audio_path=def_tts.replace("\\", "/") if def_tts else None,
+                                example_sentences=examples_data,
+                                tts_audio_path=word_tts,
+                                def_trans_audio_path=def_tts,
                             )
                             db.add(new_card)
                             
                     except Exception as e:
                         print(f"ERROR: 파일 {file} 처리 중 오류 발생: {e}")
         db.commit()
-        print("INFO: 모든 폴더 내 단어 처리 및 커밋 완료")
+        print("INFO: 유저 전용 폴더로 데이터 이관 완료")
     return user
 @router.delete("/delete")
 def delete_current_user(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
