@@ -6,7 +6,9 @@ from app.models.user import User
 from app.models.mission import Mission
 from app.schemas.user import UserCreate, UserLogin, UserResponse, TokenResponse
 from app.core.security import hash_password, verify_password, create_access_token
-
+import uuid
+import os
+import json
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 INITIAL_DAILY_MISSIONS = [
