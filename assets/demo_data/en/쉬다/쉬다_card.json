@@ -1,0 +1,41 @@
+{
+    "word": "쉬다",
+    "target_language": "en",
+    "pronunciation": "swida",
+    "pos_type": "동사",
+    "semantic_category": "생명 - 보건의료",
+    "definition_korean": "피로를 없애기 위해 몸을 편안하게 하다.",
+    "definition_translated": "rest / to make one's body comfortable to remove fatigue",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "어제 피곤해서 일찍 쉬었어요.",
+            "translation": "I rested early yesterday because I was tired.",
+            "audio_path": "assets/demo_data/en/쉬다/쉬다_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/en/쉬다/쉬다_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저는 매일 저녁에 잠시 쉬어요.",
+            "translation": "I rest for a while every evening.",
+            "audio_path": "assets/demo_data/en/쉬다/쉬다_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/en/쉬다/쉬다_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "주말에는 푹 쉴 거예요.",
+            "translation": "I will rest well on the weekend.",
+            "audio_path": "assets/demo_data/en/쉬다/쉬다_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/en/쉬다/쉬다_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/en/쉬다/쉬다_word.mp3",
+        "def_trans_tts": "assets/demo_data/en/쉬다/쉬다_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/en/쉬다/쉬다_ex_1.mp3",
+            "assets/demo_data/en/쉬다/쉬다_ex_2.mp3",
+            "assets/demo_data/en/쉬다/쉬다_ex_3.mp3"
+        ]
+    }
+}

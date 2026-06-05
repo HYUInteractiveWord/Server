@@ -1,11 +1,11 @@
 {
     "word": "놀다",
     "target_language": "en",
-    "pronunciation": "Nolda",
+    "pronunciation": "nolda",
     "pos_type": "동사",
     "semantic_category": "인문사회학 - 역사학",
     "definition_korean": "놀이 등을 하면서 재미있고 즐겁게 지내다.",
-    "definition_translated": "To have fun or spend time happily by playing games or doing leisure activities.",
+    "definition_translated": "to play / to spend time in a fun and enjoyable way through games or activities",
     "examples": [
         {
             "type": "llm_generated",
@@ -16,15 +16,15 @@
         },
         {
             "type": "llm_generated",
-            "korean": "저는 주말에 보통 게임을 하며 놀아요.",
-            "translation": "I usually play games on the weekend.",
+            "korean": "저는 주말마다 게임을 하며 놀아요.",
+            "translation": "I play games every weekend.",
             "audio_path": "assets/demo_data/en/놀다/놀다_ex_2.mp3",
             "trans_audio_path": "assets/demo_data/en/놀다/놀다_trans_ex_2.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "내일 가족들과 같이 영화를 보러 가서 놀 거예요.",
-            "translation": "Tomorrow, I will go to see a movie with my family and have fun.",
+            "korean": "내일 가족들과 같이 영화를 보러 갈 거예요.",
+            "translation": "Tomorrow, I will go to see a movie with my family.",
             "audio_path": "assets/demo_data/en/놀다/놀다_ex_3.mp3",
             "trans_audio_path": "assets/demo_data/en/놀다/놀다_trans_ex_3.mp3"
         }

@@ -5,12 +5,12 @@
     "pos_type": "명사",
     "semantic_category": "자연 - 화학",
     "definition_korean": "마음속에 품은 감정이나 생각 등이 얼굴에 드러남. 또는 그런 모습.",
-    "definition_translated": "It means when your inner feelings or thoughts show on your face, or that kind of look.",
+    "definition_translated": "Facial expression / The feeling or thought in one's heart showing on the face, or that appearance.",
     "examples": [
         {
             "type": "llm_generated",
-            "korean": "그의 표정이 슬퍼요.",
-            "translation": "His expression is sad.",
+            "korean": "그의 표정이 슬퍼 보였어요.",
+            "translation": "His facial expression looked sad.",
             "audio_path": "assets/demo_data/en/표정/표정_ex_1.mp3",
             "trans_audio_path": "assets/demo_data/en/표정/표정_trans_ex_1.mp3"
         },
@@ -23,8 +23,8 @@
         },
         {
             "type": "llm_generated",
-            "korean": "나는 그의 표정을 봤어요.",
-            "translation": "I saw his expression.",
+            "korean": "나는 그의 표정을 읽을 수 없었어요.",
+            "translation": "I could not read his facial expression.",
             "audio_path": "assets/demo_data/en/표정/표정_ex_3.mp3",
             "trans_audio_path": "assets/demo_data/en/표정/표정_trans_ex_3.mp3"
         }

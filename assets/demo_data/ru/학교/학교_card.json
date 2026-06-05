@@ -1,29 +1,29 @@
 {
     "word": "학교",
     "target_language": "ru",
-    "pronunciation": "Хаккё",
+    "pronunciation": "hakgyo",
     "pos_type": "명사",
     "semantic_category": "인문사회학 - 교육",
     "definition_korean": "일정한 목적, 교과 과정, 제도 등에 따라 학생을 교육하는 기관.",
-    "definition_translated": "Школа — это учреждение, где учат учеников по определённой программе и системе.",
+    "definition_translated": "школа / учреждение для обучения студентов по определенной программе и системе",
     "examples": [
         {
             "type": "llm_generated",
-            "korean": "학교는 재미있어요.",
-            "translation": "Школа интересная.",
+            "korean": "저희 학교는 아주 커요.",
+            "translation": "Наша школа очень большая.",
             "audio_path": "assets/demo_data/ru/학교/학교_ex_1.mp3",
             "trans_audio_path": "assets/demo_data/ru/학교/학교_trans_ex_1.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "이곳은 학교입니다.",
-            "translation": "Это школа.",
+            "korean": "이곳은 초등학교입니다.",
+            "translation": "Это начальная школа.",
             "audio_path": "assets/demo_data/ru/학교/학교_ex_2.mp3",
             "trans_audio_path": "assets/demo_data/ru/학교/학교_trans_ex_2.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "저는 학교에 가요.",
+            "korean": "저는 학교에 갑니다.",
             "translation": "Я иду в школу.",
             "audio_path": "assets/demo_data/ru/학교/학교_ex_3.mp3",
             "trans_audio_path": "assets/demo_data/ru/학교/학교_trans_ex_3.mp3"

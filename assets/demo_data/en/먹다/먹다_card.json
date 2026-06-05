@@ -1,30 +1,30 @@
 {
     "word": "먹다",
     "target_language": "en",
-    "pronunciation": "Meokda",
+    "pronunciation": "meokda",
     "pos_type": "동사",
     "semantic_category": "인공물 - 에너지/자원",
     "definition_korean": "음식 등을 입을 통하여 배 속에 들여보내다.",
-    "definition_translated": "To put food or something into your stomach through your mouth.",
+    "definition_translated": "to eat / to put food into your mouth and swallow it",
     "examples": [
         {
             "type": "llm_generated",
-            "korean": "저는 어제 김치찌개를 먹었어요.",
-            "translation": "I ate kimchi stew yesterday.",
+            "korean": "저는 어제 김치를 먹었어요.",
+            "translation": "I ate kimchi yesterday.",
             "audio_path": "assets/demo_data/en/먹다/먹다_ex_1.mp3",
             "trans_audio_path": "assets/demo_data/en/먹다/먹다_trans_ex_1.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "저는 매일 아침 밥을 먹어요.",
-            "translation": "I eat rice every morning.",
+            "korean": "그는 지금 사과를 먹어요.",
+            "translation": "He is eating an apple now.",
             "audio_path": "assets/demo_data/en/먹다/먹다_ex_2.mp3",
             "trans_audio_path": "assets/demo_data/en/먹다/먹다_trans_ex_2.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "내일 친구와 같이 피자를 먹을 거예요.",
-            "translation": "I will eat pizza with my friend tomorrow.",
+            "korean": "내일 우리는 맛있는 것을 먹을 거예요.",
+            "translation": "We will eat something delicious tomorrow.",
             "audio_path": "assets/demo_data/en/먹다/먹다_ex_3.mp3",
             "trans_audio_path": "assets/demo_data/en/먹다/먹다_trans_ex_3.mp3"
         }

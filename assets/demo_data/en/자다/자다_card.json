@@ -5,7 +5,7 @@
     "pos_type": "동사",
     "semantic_category": "기타",
     "definition_korean": "눈을 감고 몸과 정신의 활동을 멈추고 한동안 쉬는 상태가 되다.",
-    "definition_translated": "To sleep means to close your eyes and rest your body and mind for a while.",
+    "definition_translated": "to sleep / to stop physical and mental activity with closed eyes for a period of rest",
     "examples": [
         {
             "type": "llm_generated",
@@ -16,7 +16,7 @@
         },
         {
             "type": "llm_generated",
-            "korean": "저는 매일 밤 잠을 자요.",
+            "korean": "저는 매일 밤에 잠을 자요.",
             "translation": "I sleep every night.",
             "audio_path": "assets/demo_data/en/자다/자다_ex_2.mp3",
             "trans_audio_path": "assets/demo_data/en/자다/자다_trans_ex_2.mp3"

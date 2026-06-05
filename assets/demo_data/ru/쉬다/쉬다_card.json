@@ -1,0 +1,41 @@
+{
+    "word": "쉬다",
+    "target_language": "ru",
+    "pronunciation": "щида",
+    "pos_type": "동사",
+    "semantic_category": "생명 - 보건의료",
+    "definition_korean": "피로를 없애기 위해 몸을 편안하게 하다.",
+    "definition_translated": "отдыхать / делать тело расслабленным, чтобы избавиться от усталости",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "어제 피곤해서 일찍 쉬었어요.",
+            "translation": "Вчера я рано отдыхал(а), потому что был(а) уставшим.",
+            "audio_path": "assets/demo_data/ru/쉬다/쉬다_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/ru/쉬다/쉬다_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저는 주말에 보통 집에서 쉬어요.",
+            "translation": "Я обычно отдыхаю дома на выходных.",
+            "audio_path": "assets/demo_data/ru/쉬다/쉬다_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/ru/쉬다/쉬다_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "내일은 늦잠을 자고 푹 쉴 거예요.",
+            "translation": "Завтра я посплю допоздна и хорошо отдохну.",
+            "audio_path": "assets/demo_data/ru/쉬다/쉬다_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/ru/쉬다/쉬다_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/ru/쉬다/쉬다_word.mp3",
+        "def_trans_tts": "assets/demo_data/ru/쉬다/쉬다_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/ru/쉬다/쉬다_ex_1.mp3",
+            "assets/demo_data/ru/쉬다/쉬다_ex_2.mp3",
+            "assets/demo_data/ru/쉬다/쉬다_ex_3.mp3"
+        ]
+    }
+}

@@ -5,26 +5,26 @@
     "pos_type": "명사",
     "semantic_category": "인문사회학 - 문화예술",
     "definition_korean": "사람이 엉덩이와 허벅지를 대고 걸터앉는 데 쓰는 기구.",
-    "definition_translated": "A chair is a piece of furniture that people sit on with their bottom and thighs.",
+    "definition_translated": "chair / a piece of furniture for sitting on with one's bottom and thighs",
     "examples": [
         {
             "type": "llm_generated",
-            "korean": "의자가 여기에 있어요.",
-            "translation": "The chair is here.",
+            "korean": "이 의자는 편해요.",
+            "translation": "This chair is comfortable.",
             "audio_path": "assets/demo_data/en/의자/의자_ex_1.mp3",
             "trans_audio_path": "assets/demo_data/en/의자/의자_trans_ex_1.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "이것은 의자입니다.",
-            "translation": "This is a chair.",
+            "korean": "저것은 좋은 의자예요.",
+            "translation": "That is a good chair.",
             "audio_path": "assets/demo_data/en/의자/의자_ex_2.mp3",
             "trans_audio_path": "assets/demo_data/en/의자/의자_trans_ex_2.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "저는 의자에 앉아요.",
-            "translation": "I sit on the chair.",
+            "korean": "저는 의자를 찾아요.",
+            "translation": "I look for a chair.",
             "audio_path": "assets/demo_data/en/의자/의자_ex_3.mp3",
             "trans_audio_path": "assets/demo_data/en/의자/의자_trans_ex_3.mp3"
         }

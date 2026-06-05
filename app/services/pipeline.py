@@ -305,12 +305,31 @@ class KoreanLearningPipeline:
             return ""
 
     async def process_with_llm(self, word_raw: str, definition: str, pos: str, target_language: str = "en") -> dict:
-        """LLM 번역 및 품사별 문법 특화 예문 생성 (직역/설명 슬래시 구분 강제 적용)"""
+        """LLM 번역 및 품사별 문법 특화 예문 생성 (타겟 언어 원어 지시어 적용)"""
         target_lang_str = self._get_lang_str(target_language)
-        
-        romanization_instruction = '"단어의 한국어 발음을 [목표 언어]의 문자로 소리나는 대로 표기 (예: 러시아어면 키릴 문자로 표기)"'
-        
-        trans_def_instruction = '"[1:1 직역 단어] / [목표 언어로 쉽게 설명한 문장] (반드시 슬래시(/)로 직역과 설명을 구분하세요. 예: apple / a round fruit with red or green skin)"'
+        lang_code = target_language.strip().lower().split("-")[0]
+        if lang_code == "ru":
+            romanization_instruction = (
+                '"Напишите произношение ТОЛЬКО ОДНОГО главного слова, указанного в поле [단어], русскими буквами (кириллицей). '
+                'КАТЕГОРИЧЕСКИ ЗАПРЕЩАЕТСЯ писать произношение сгенерированных предложений! '
+                'Только одно слово. Без латиницы, без хангыля, без скобок. Пример: иджа"'
+            )
+            trans_def_instruction = (
+                '"[Точный перевод в одно слово] / [Простое объяснение на русском языке]. '
+                'Не используйте корейский язык в этом поле. Обязательно разделяйте перевод и объяснение косой чертой (/). '
+                'Пример: стул / предмет мебели с приподнятой поверхностью, опирающийся на ножки"'
+            )
+        else:
+            romanization_instruction = (
+                '"Write the pronunciation of ONLY the single main word indicated in [단어] using the Latin alphabet. '
+                'ABSOLUTELY DO NOT write the pronunciation of the generated example sentences! '
+                'Just the one word. No Hangul, no parentheses. Example: uija"'
+            )
+            trans_def_instruction = (
+                '"[Exact 1:1 translation word] / [Simple explanation sentence in English]. '
+                'Do not use Korean at all in this field. You must separate the translation and explanation with a slash (/). '
+                'Example: chair / a piece of furniture with a raised surface supported by legs"'
+            )
         
         # 1. 동사 분기 프롬프트 (과거, 현재, 미래 시제 반영)
         if "동사" in pos or "Verb" in pos:
@@ -663,10 +682,6 @@ class KoreanLearningPipeline:
             with open(build_path(word_dir, f"{word}_card.json"), 'w', encoding='utf-8') as f:
                 json.dump(word_card, f, ensure_ascii=False, indent=4)
         
-
-        if final_cards:
-            with open(build_path(output_dir, "all_vocab_cards.json"), 'w', encoding='utf-8') as f:
-                json.dump(final_cards, f, ensure_ascii=False, indent=4)
                 
         print(f"  [Log] Phase 2 Total: {time.time() - t_start:.2f}s", flush=True)
         return final_cards

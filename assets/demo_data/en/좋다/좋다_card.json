@@ -5,7 +5,7 @@
     "pos_type": "형용사",
     "semantic_category": "인문사회학 - 문화예술",
     "definition_korean": "어떤 것의 성질이나 내용 등이 훌륭하여 만족할 만하다.",
-    "definition_translated": "It means that something's quality or content is excellent and satisfactory.",
+    "definition_translated": "good / satisfactory or excellent in quality or content",
     "examples": [
         {
             "type": "llm_generated",
@@ -16,7 +16,7 @@
         },
         {
             "type": "llm_generated",
-            "korean": "날씨가 오늘 아주 좋아요.",
+            "korean": "오늘 날씨가 참 좋아요.",
             "translation": "The weather is very nice today.",
             "audio_path": "assets/demo_data/en/좋다/좋다_ex_2.mp3",
             "trans_audio_path": "assets/demo_data/en/좋다/좋다_trans_ex_2.mp3"

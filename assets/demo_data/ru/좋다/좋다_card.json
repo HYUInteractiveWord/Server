@@ -1,30 +1,30 @@
 {
     "word": "좋다",
     "target_language": "ru",
-    "pronunciation": "조타 (jota)",
+    "pronunciation": "โจทตา",
     "pos_type": "형용사",
     "semantic_category": "인문사회학 - 문화예술",
     "definition_korean": "어떤 것의 성질이나 내용 등이 훌륭하여 만족할 만하다.",
-    "definition_translated": "Это означает, что что-то является превосходным или удовлетворяющим.",
+    "definition_translated": "хороший / что-то, что является превосходным или достойным удовлетворения",
     "examples": [
         {
             "type": "llm_generated",
-            "korean": "이 커피는 정말 좋아요.",
-            "translation": "Этот кофе действительно хороший.",
+            "korean": "이것은 좋은 책이에요.",
+            "translation": "Эта книга хорошая.",
             "audio_path": "assets/demo_data/ru/좋다/좋다_ex_1.mp3",
             "trans_audio_path": "assets/demo_data/ru/좋다/좋다_trans_ex_1.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "오늘 날씨가 아주 좋아요.",
-            "translation": "Сегодня погода очень хорошая.",
+            "korean": "날씨가 정말 좋아요.",
+            "translation": "Погода действительно хорошая.",
             "audio_path": "assets/demo_data/ru/좋다/좋다_ex_2.mp3",
             "trans_audio_path": "assets/demo_data/ru/좋다/좋다_trans_ex_2.mp3"
         },
         {
             "type": "llm_generated",
-            "korean": "음식이 맛있고, 분위기도 좋아요.",
-            "translation": "Еда вкусная, и атмосфера тоже хорошая.",
+            "korean": "음식이 맛있고 좋아요.",
+            "translation": "Еда вкусная и хорошая.",
             "audio_path": "assets/demo_data/ru/좋다/좋다_ex_3.mp3",
             "trans_audio_path": "assets/demo_data/ru/좋다/좋다_trans_ex_3.mp3"
         }
