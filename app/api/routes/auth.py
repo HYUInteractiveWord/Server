@@ -63,22 +63,22 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.post("/demo", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_demo_user_and_login(
-    body: UserCreate, db: Session = Depends(get_db)
+    dbody: UserCreate, db: Session = Depends(get_db)
 ):
     """
     [앱 연동용] 데모 유저를 즉시 생성하고 10000 XP를 부여한 뒤, 
     해당 언어의 데모 단어장을 이식하고 바로 로그인할 수 있는 토큰을 반환합니다.
     """
-    if db.query(User).filter(User.username == body.username).first():
+    if db.query(User).filter(User.username == dbody.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
-    if db.query(User).filter(User.email == body.email).first():
+    if db.query(User).filter(User.email == dbody.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user = User(
-        username=body.username,
-        email=body.email,
-        hashed_password=hash_password(body.password),
-        preferred_language=body.preferred_language,
+        username=dbody.username,
+        email=dbody.email,
+        hashed_password=hash_password(dbody.password),
+        preferred_language=dbody.preferred_language,
     )
     db.add(user)
     db.flush()
@@ -89,7 +89,7 @@ async def create_demo_user_and_login(
     db.refresh(user)
     
     # 2. 언어별 경로 설정 로직
-    target_lang = body.preferred_language.strip().lower().split("-")[0]
+    target_lang = dbody.preferred_language.strip().lower().split("-")[0]
     if target_lang not in ["ru", "en", "ko"]:
         target_lang = "ko"
         
