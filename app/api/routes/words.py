@@ -120,26 +120,7 @@ def _increase_daily_mission_progress(
     return mission
 
 def _complete_mission_if_ready(mission: Mission | None, user: User) -> int:
-    if mission is None:
-        return 0
-
-    if mission.is_completed:
-        return 0
-
-    if (mission.progress or 0) < mission.target:
-        return 0
-
-    mission.is_completed = True
-
-    if hasattr(mission, "completed_at"):
-        mission.completed_at = datetime.utcnow()
-
-    reward = mission.xp_reward or 0
-    if reward > 0:
-        user.xp += reward
-        _refresh_user_rank_and_slots(user)
-
-    return reward
+    return 0
 
 
 nlp_pipeline = KoreanLearningPipeline(
