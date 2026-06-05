@@ -305,10 +305,12 @@ class KoreanLearningPipeline:
             return ""
 
     async def process_with_llm(self, word_raw: str, definition: str, pos: str, target_language: str = "en") -> dict:
-        """LLM 번역 및 품사별 문법 특화 예문 생성 (동사/명사/형용사별 분기 조건 적용)"""
+        """LLM 번역 및 품사별 문법 특화 예문 생성 (직역/설명 슬래시 구분 강제 적용)"""
         target_lang_str = self._get_lang_str(target_language)
         
         romanization_instruction = '"단어의 한국어 발음을 [목표 언어]의 문자로 소리나는 대로 표기 (예: 러시아어면 키릴 문자로 표기)"'
+        
+        trans_def_instruction = '"[1:1 직역 단어] / [목표 언어로 쉽게 설명한 문장] (반드시 슬래시(/)로 직역과 설명을 구분하세요. 예: apple / a round fruit with red or green skin)"'
         
         # 1. 동사 분기 프롬프트 (과거, 현재, 미래 시제 반영)
         if "동사" in pos or "Verb" in pos:
@@ -322,7 +324,7 @@ class KoreanLearningPipeline:
                 "- 세 번째 예문: 해당 동사의 '미래 시제(~을 것이다, ~겠습니다 등)' 형태가 들어간 예문\n\n"
                 "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
                 "{{\n"
-                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                f'  "translated_definition": {trans_def_instruction},\n'
                 '  "easy_examples": [\n'
                 '    {{"korean": "과거 시제 반영 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "현재 시제 반영 문장", "translation": "목표 언어 번역"}},\n'
@@ -344,7 +346,7 @@ class KoreanLearningPipeline:
                 "- 세 번째 예문: 해당 명사가 문장 내에서 '목적어(을/를 결합)'로 사용된 예문\n\n"
                 "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
                 "{{\n"
-                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                f'  "translated_definition": {trans_def_instruction},\n'
                 '  "easy_examples": [\n'
                 '    {{"korean": "명사가 주어로 쓰인 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "명사가 서술어로 쓰인 문장", "translation": "목표 언어 번역"}},\n'
@@ -366,7 +368,7 @@ class KoreanLearningPipeline:
                 "- 세 번째 예문: 해당 형용사가 문장 중간에서 연결어미나 부사형 어미 등과 결합하여 '다양한 변형 구조 위치(예: 예쁘게 자라다, 예쁘고 좋다)'로 쓰인 예문\n\n"
                 "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
                 "{{\n"
-                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                f'  "translated_definition": {trans_def_instruction},\n'
                 '  "easy_examples": [\n'
                 '    {{"korean": "명사 수식형 구조의 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "문장 끝 서술형 구조의 문장", "translation": "목표 언어 번역"}},\n'
@@ -376,7 +378,29 @@ class KoreanLearningPipeline:
                 "}}"
             )
             
-        # 4. Fallback (기타 부사, 관형사 등 예외 품사용 기본 3개 구성 자동 방어)
+        # 4. 부사 분기 프롬프트
+        elif "부사" in pos or "Adverb" in pos:
+            prompt_text = (
+                "[단어]: {word_raw} ({pos})\n"
+                "[정의]: {definition}\n"
+                "[목표 언어]: {target_lang_str}\n\n"
+                "당신은 국어교육학 전문가입니다. 위 부사를 사용하여 초급 한국어 학습자를 위한 쉽고 명확한 예문 3개를 생성하되, 수식하는 대상과 문장 내 위치에 따라 다양하게 배치하세요.\n"
+                "- 첫 번째 예문: 해당 부사가 '동사' 바로 앞에서 동작의 상태나 정도를 꾸며주는 예문 (예: '빨리' 걷다, '잘' 먹다)\n"
+                "- 두 번째 예문: 해당 부사가 '형용사'나 '다른 부사' 앞에서 그 정도를 강조하는 예문 (예: '아주' 예쁘다, '너무' 빨리)\n"
+                "- 세 번째 예문: 문장 맨 앞이나 중간에서 문맥 전체의 분위기를 전환하거나 강조하는 예문\n\n"
+                "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
+                "{{\n"
+                f'  "translated_definition": {trans_def_instruction},\n'
+                '  "easy_examples": [\n'
+                '    {{"korean": "동사 수식형 예문", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "형용사/부사 강조형 예문", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "문장 전체/분위기 수식형 예문", "translation": "목표 언어 번역"}}\n'
+                '  ],\n'
+                f'  "romanization": {romanization_instruction}\n'
+                "}}"
+            )
+            
+        # 5. Fallback
         else:
             prompt_text = (
                 "[단어]: {word_raw} ({pos})\n"
@@ -385,7 +409,7 @@ class KoreanLearningPipeline:
                 "당신은 국어교육학 전문가입니다. 위 단어를 문맥 내에 배치하여 결합 형태가 서로 다른 유용하고 명확한 예문 3개를 생성하세요.\n"
                 "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
                 "{{\n"
-                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                f'  "translated_definition": {trans_def_instruction},\n'
                 '  "easy_examples": [\n'
                 '    {{"korean": "활용 예문 1", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "활용 예문 2", "translation": "목표 언어 번역"}},\n'
