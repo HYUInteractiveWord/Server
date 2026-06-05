@@ -103,44 +103,53 @@ async def create_demo_user_and_login(
     if not os.path.exists(all_vocab_path):
         all_vocab_path = "assets/demo_data/all_vocab_cards.json"
         
-    # 3. 데모 단어장 DB에 이식하기
-    if os.path.exists(all_vocab_path):
-        with open(all_vocab_path, "r", encoding="utf-8") as f:
-            cards_data = json.load(f)
-            
-        print(f"DEBUG: 로드된 데이터 타입: {type(cards_data)}")
-        print(f"DEBUG: 전체 데이터 개수: {len(cards_data) if isinstance(cards_data, list) else '리스트 아님'}")
-        if not isinstance(cards_data, list):
-            print("ERROR: JSON 데이터가 리스트 형식이 아닙니다.")
-        else:
-            for i, data in enumerate(cards_data):
-                try:
-                    # 중복 체크
-                    if db.query(WordCard).filter(
-                        WordCard.user_id == user.id, 
-                        WordCard.korean_word == data.get("word")
-                    ).first():
-                        continue
+    if os.path.exists(demo_dir):
+        # os.walk는 하위 폴더를 모두 뒤집니다
+        for root, dirs, files in os.walk(demo_dir):
+            for file in files:
+                if file.endswith(".json"):
+                    file_path = os.path.join(root, file)
+                    print(f"DEBUG: 처리 중인 파일 -> {file_path}")
+                    
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            # 구조가 리스트인지 확인
+                            data_content = json.load(f)
+                            # 파일 구조에 따라 리스트로 변환 (파일마다 다를 수 있으니 주의)
+                            cards_data = data_content if isinstance(data_content, list) else [data_content]
+                            
+                        for data in cards_data:
+                            # 중복 체크
+                            if db.query(WordCard).filter(
+                                WordCard.user_id == user.id,
+                                WordCard.korean_word == data.get("word")
+                            ).first():
+                                continue
 
-                    audio = data.get("audio", {})
-                    new_card = WordCard(
-                        user_id=user.id,
-                        korean_word=data.get("word"),
-                        source="demo",
-                        pos=data.get("pos_type"),
-                        definition=data.get("definition_korean"),
-                        definition_translated=data.get("definition_translated"),
-                        pronunciation=data.get("pronunciation"),
-                        example_sentences=data.get("examples", []),
-                        tts_audio_path=audio.get("word_tts", "").replace("\\", "/") if audio.get("word_tts") else None,
-                        def_trans_audio_path=audio.get("def_trans_tts", "").replace("\\", "/") if audio.get("def_trans_tts") else None,
-                    )
-                    db.add(new_card)
-                except Exception as e:
-                    print(f"ERROR: {i}번째 단어 추가 실패: {e}")
-                    continue 
-            db.commit()
-            print("INFO: 모든 단어 처리 완료 및 커밋 성공")
+                            # 오디오 파일 처리
+                            audio = data.get("audio", {})
+                            word_tts = audio.get("word_tts", "")
+                            def_tts = audio.get("def_trans_tts", "")
+                            
+                            new_card = WordCard(
+                                user_id=user.id,
+                                korean_word=data.get("word"),
+                                source="demo",
+                                pos=data.get("pos_type"),
+                                definition=data.get("definition_korean"),
+                                definition_translated=data.get("definition_translated"),
+                                pronunciation=data.get("pronunciation"),
+                                example_sentences=data.get("examples", []),
+                                # 폴더 경로 기반으로 오디오 경로 정규화 (필요시 경로 조정)
+                                tts_audio_path=word_tts.replace("\\", "/") if word_tts else None,
+                                def_trans_audio_path=def_tts.replace("\\", "/") if def_tts else None,
+                            )
+                            db.add(new_card)
+                            
+                    except Exception as e:
+                        print(f"ERROR: 파일 {file} 처리 중 오류 발생: {e}")
+        db.commit()
+        print("INFO: 모든 폴더 내 단어 처리 및 커밋 완료")
     return user
 @router.delete("/delete")
 def delete_current_user(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
