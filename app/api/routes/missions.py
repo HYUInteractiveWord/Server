@@ -105,8 +105,21 @@ def complete_mission(mission_id: int, db: Session = Depends(get_db), current_use
         current_user.rank = new_rank
         current_user.max_word_slots = RANK_WORD_SLOTS.get(new_rank, 20)
 
+    mission_response_data = {
+        "id": mission.id,
+        "user_id": mission.user_id,
+        "mission_type": mission.mission_type,
+        "parameter": mission.parameter,
+        "progress": mission.progress,
+        "target": mission.target,
+        "is_completed": True,
+        "xp_reward": mission.xp_reward,
+        "created_at": mission.created_at,
+        "completed_at": datetime.now(timezone.utc),
+        "last_reset_date": mission.last_reset_date
+    }
+
     # 2.미션을 삭제하여 다음 호출 시 자동으로 새 미션이 생성되게 함
     db.delete(mission) 
-    
     db.commit()
-    return mission # 프론트에 정보 전달 후 삭제됨
+    return mission_response_data
