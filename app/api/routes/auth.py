@@ -85,9 +85,9 @@ async def create_demo_user_and_login(
     )
     db.add(user)
     db.flush()
-
+    today = datetime.now(timezone(timedelta(hours=9))).date()
     for m in INITIAL_DAILY_MISSIONS:
-        db.add(Mission(user_id=user.id, **m))
+        db.add(Mission(user_id=user.id, last_reset_date=today, **m))
     db.commit()
     db.refresh(user)
     
