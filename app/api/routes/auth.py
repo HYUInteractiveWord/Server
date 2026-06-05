@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.mission import Mission
 from app.schemas.user import UserCreate, UserLogin, UserResponse, TokenResponse
 from app.core.security import hash_password, verify_password, create_access_token
+from app.models.word_card import WordCard
 import uuid
 import os
 import json
@@ -60,7 +61,7 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
-@router.post("/demo")
+@router.post("/demo", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_demo_user_and_login(
     preferred_language: str = "en",
     db: Session = Depends(get_db)
@@ -69,21 +70,24 @@ async def create_demo_user_and_login(
     [앱 연동용] 데모 유저를 즉시 생성하고 10000 XP를 부여한 뒤, 
     해당 언어의 데모 단어장을 이식하고 바로 로그인할 수 있는 토큰을 반환합니다.
     """
-    # 1. 묻지도 따지지도 않고 데모 유저 신규 생성
-    demo_name = f"demo_{uuid.uuid4().hex[:6]}"
-    
-    new_user = User(
-        username=demo_name,
-        email=f"{demo_name}@demo.com",
-        hashed_password=get_password_hash("demo_dummy_password"), 
-        preferred_language=preferred_language,
-        xp=10000,
-        rank="Emerald",       # 10000 XP에 해당하는 랭크 강제 주입
-        max_word_slots=100    # 랭크업 슬롯(100개) 강제 주입
+    if db.query(User).filter(User.username == body.username).first():
+        raise HTTPException(status_code=400, detail="Username already taken")
+    if db.query(User).filter(User.email == body.email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    user = User(
+        username=body.username,
+        email=body.email,
+        hashed_password=hash_password(body.password),
+        preferred_language=body.preferred_language,
     )
-    db.add(new_user)
+    db.add(user)
+    db.flush()
+
+    for m in INITIAL_DAILY_MISSIONS:
+        db.add(Mission(user_id=user.id, **m))
     db.commit()
-    db.refresh(new_user)
+    db.refresh(user)
     
     # 2. 언어별 경로 설정 로직
     target_lang = preferred_language.strip().lower().split("-")[0]
