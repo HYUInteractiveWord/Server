@@ -90,35 +90,23 @@ def get_daily_missions(
 
 
 @router.post("/{mission_id}/complete", response_model=MissionResponse)
-def complete_mission(
-    mission_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """미션 완료 처리 및 XP 지급."""
-    mission = db.query(Mission).filter(
-        Mission.id == mission_id,
-        Mission.user_id == current_user.id,
-    ).first()
+def complete_mission(mission_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    mission = db.query(Mission).filter(Mission.id == mission_id, Mission.user_id == current_user.id).first()
+    
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
-    if mission.is_completed:
-        raise HTTPException(status_code=400, detail="Mission already completed")
     if mission.progress < mission.target:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Mission not yet finished ({mission.progress}/{mission.target})",
-        )
+        raise HTTPException(status_code=400, detail="미션이 아직 완료되지 않았습니다.")
 
-    mission.is_completed = True
-    mission.completed_at = datetime.now(timezone.utc)
-
+    # 1. 보상 지급 및 랭크 반영
     current_user.xp += mission.xp_reward
     new_rank = get_rank_for_xp(current_user.xp)
     if new_rank != current_user.rank:
         current_user.rank = new_rank
-        current_user.max_word_slots = RANK_WORD_SLOTS[new_rank]
+        current_user.max_word_slots = RANK_WORD_SLOTS.get(new_rank, 20)
 
+    # 2.미션을 삭제하여 다음 호출 시 자동으로 새 미션이 생성되게 함
+    db.delete(mission) 
+    
     db.commit()
-    db.refresh(mission)
-    return mission
+    return mission # 프론트에 정보 전달 후 삭제됨
