@@ -81,8 +81,8 @@ async def create_demo_user_and_login(
         email=dbody.email,
         hashed_password=hash_password(dbody.password),
         preferred_language=dbody.preferred_language,
-        xp=10000, 
-        rank="Emerald",
+        xp=499, 
+        rank="Bronze",
         max_word_slots=100
     )
     db.add(user)
