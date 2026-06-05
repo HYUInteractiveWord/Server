@@ -216,8 +216,10 @@ async def evaluate_pronunciation_test(
             )
 
     full_tts_path = target_path
+    file_ext = os.path.splitext(audio.filename)[1] # .m4a, .aac 등
+    if not file_ext: file_ext = ".m4a"
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_user:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_user:
         tmp_user.write(audio_bytes)
         user_audio_path = tmp_user.name
 
