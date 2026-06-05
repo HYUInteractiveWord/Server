@@ -518,53 +518,23 @@ class KoreanLearningPipeline:
             return {}
 
     async def generate_word_preview(self, word: str, definition: str, pos: str, output_dir: str, target_language: str = "en") -> dict:
-        """사전에서 선택한 단어의 정밀 프리뷰 생성 (발음 부호, 타겟언어 정의 번역 및 개별 뜻풀이 MP3 세트 일괄 빌드)"""
+        """
+        [최적화본] LLM 번역 및 뜻 TTS 생성을 생략하고, 표제어와 표제어 음성만 즉시 생성
+        """
         os.makedirs(output_dir, exist_ok=True)
-        print(f"\n[Preview] '{word}' 임시 확인용 데이터 생성 중...", flush=True)
-        
-        target_lang_str = self._get_lang_str(target_language)
-
-        prompt = PromptTemplate.from_template(
-            "당신은 한국어 교육 전문가입니다.\n"
-            "[단어]: {word}\n[품사]: {pos}\n[정의]: {definition}\n[목표 언어]: {target_lang_str}\n\n"
-            "이 단어에 대해 아래 JSON을 생성하세요:\n"
-            "1. translated_definition (정의를 '목표 언어'로 번역 또는 쉽게 설명)\n"
-            "2. romanization (단어의 정확한 로마자 발음 표기법)\n"
-            "{{\n"
-            '  "translated_definition": "...",\n'
-            '  "romanization": "..."\n'
-            "}}"
-        )
-        chain = prompt | self.llm | self.json_parser
-        try:
-            llm_result = await chain.ainvoke({
-                "word": word, 
-                "definition": definition, 
-                "pos": pos,
-                "target_lang_str": target_lang_str
-            })
-        except Exception as e:
-            print(f"  [Error] Preview LLM failed: {e}", flush=True)
-            llm_result = {"translated_definition": "", "romanization": ""}
-            
-        # 1. 한국어 표제어 음성 파일 생성
+        print(f"\n[Preview] '{word}' 고속 프리뷰 데이터 생성 중...", flush=True)
         word_audio_path = build_path(output_dir, f"temp_{word}_word.mp3")
         await self.generate_tts(word, word_audio_path, lang="ko")
-        
-        # 2. 번역 뜻 외국어(러시아어/영어 등) 음성 파일 빌드 추가
-        translated_def_text = llm_result.get("translated_definition", "")
-        def_trans_audio_path = build_path(output_dir, f"temp_{word}_def_trans.mp3")
-        await self.generate_tts(translated_def_text, def_trans_audio_path, lang=target_language)
         
         return {
             "word": word,
             "target_language": target_language,
             "pos_type": pos,
             "definition_korean": definition,
-            "definition_translated": translated_def_text,
-            "pronunciation": llm_result.get("romanization", ""),
+            "definition_translated": definition, # 번역 대신 원문 그대로 전달 (어차피 앱에서 안 보여줌)
+            "pronunciation": "",                # 로마자 표기도 생략 (LLM이 필요하므로)
             "audio_path": word_audio_path,
-            "def_trans_audio_path": def_trans_audio_path 
+            "def_trans_audio_path": None        # 뜻 음성 경로는 없음으로 처리
         }
 
     async def verify_spoken_word(self, audio_bytes: bytes, ffmpeg_bin: str, whisper_model_size: str, target_word: str) -> dict:
