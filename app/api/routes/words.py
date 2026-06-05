@@ -15,7 +15,9 @@ from app.services.tts import generate_tts
 from app.services.pipeline import KoreanLearningPipeline
 from app.core.config import settings
 from app.services.gamification import get_rank_for_xp, RANK_WORD_SLOTS
-
+import os
+import json
+import asyncio
 
 router = APIRouter(prefix="/words", tags=["words"])
 
@@ -37,7 +39,10 @@ class WordQuizResultRequest(BaseModel):
     quiz_type: str = "meaning"
     results: list[WordQuizItemResult]
 
-
+class BulkGenerateRequest(BaseModel):
+    words: list[str]
+    output_dir: str = "assets/demo_data"
+    target_language: str = "ru"
 def _effect_level_from_point(point: int) -> int:
     point = max(0, min(100, point))
     if point >= 100:
@@ -443,3 +448,110 @@ def delete_word_card(
 
     db.delete(card)
     db.commit()
+
+@router.post("/admin/generate_bulk")
+async def generate_bulk_data(body: BulkGenerateRequest):
+    """
+    [HTML 테스트 전용] 로그인 없이 다수의 단어를 한 번에 생성하여 지정된 폴더에 저장합니다.
+    """
+    os.makedirs(body.output_dir, exist_ok=True)
+    
+    results = []
+    for word_str in body.words:
+        word = word_str.strip()
+        if not word:
+            continue
+        
+        # 1. 기초 사전에서 품사와 뜻 가져오기 (Fallback)
+        fallback_info = fetch_word_info(word)
+        selected_info = {
+            "pos": fallback_info.get("pos") or "명사",
+            "definition": fallback_info.get("definition") or ""
+        }
+        
+        # 2. NLP 파이프라인 가동 (TTS 및 JSON 디스크 저장)
+        try:
+            cards = await nlp_pipeline.phase2_generate(
+                selected_words={word: selected_info},
+                output_dir=body.output_dir,
+                target_language=body.target_language
+            )
+            if cards:
+                results.extend(cards)
+        except Exception as e:
+            print(f"[Bulk Gen Error] '{word}': {e}", flush=True)
+            
+        # 연속 API 호출로 인한 과부하 및 차단 방지
+        await asyncio.sleep(0.5) 
+        
+    return {
+        "success_count": len(results),
+        "output_dir": body.output_dir,
+        "cards": results
+    }
+
+
+@router.post("/admin/upgrade_demo")
+async def upgrade_to_superuser_and_apply_demo(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    [앱 연동용] 현재 로그인된 유저의 경험치를 폭증시켜 100개 슬롯과 프로필 랭크를 해금하고,
+    유저의 언어 설정에 맞는 데모 단어 세트를 즉시 유저 단어장에 복사합니다.
+    """
+    # 1. 유저 경험치(XP) 폭증 처리
+    current_user.xp += 10000 
+    _refresh_user_rank_and_slots(current_user)
+    
+    # 2. 유저의 설정 언어 확인 및 경로 분기
+    # "ru-RU" 등 어떤 포맷으로 들어와도 "ru", "en", "ko" 등으로 안전하게 정제해주는 기존 함수 재사용
+    target_lang = _normalize_target_language(current_user.preferred_language)
+    
+    # 예: assets/demo_data/ru/all_vocab_cards.json
+    demo_dir = f"assets/demo_data/{target_lang}"
+    all_vocab_path = os.path.join(demo_dir, "all_vocab_cards.json")
+    
+    # (안전장치) 만약 해당 언어의 폴더나 파일이 아직 생성되지 않았다면, 기본 폴더로 Fallback
+    if not os.path.exists(all_vocab_path):
+        all_vocab_path = "assets/demo_data/all_vocab_cards.json"
+    
+    # 3. 데이터 파싱 및 DB 삽입
+    added_count = 0
+    if os.path.exists(all_vocab_path):
+        with open(all_vocab_path, "r", encoding="utf-8") as f:
+            cards_data = json.load(f)
+            
+        for data in cards_data:
+            existing = db.query(WordCard).filter(
+                WordCard.user_id == current_user.id,
+                WordCard.korean_word == data.get("word")
+            ).first()
+            
+            if not existing:
+                new_card = WordCard(
+                    user_id=current_user.id,
+                    korean_word=data.get("word"),
+                    source="demo",
+                    pos=data.get("pos_type"),
+                    definition=data.get("definition_korean"),
+                    definition_translated=data.get("definition_translated"),
+                    pronunciation=data.get("pronunciation"),
+                    example_sentences=data.get("examples", []),
+                    tts_audio_path=_norm_path(data.get("audio", {}).get("word_tts")),
+                    def_trans_audio_path=_norm_path(data.get("audio", {}).get("def_trans_tts")),
+                )
+                db.add(new_card)
+                added_count += 1
+                
+    db.commit()
+    db.refresh(current_user)
+    
+    return {
+        "message": f"슈퍼유저 승급 및 데모 데이터({target_lang}) 이식이 완료되었습니다!",
+        "user_new_xp": current_user.xp,
+        "user_new_rank": current_user.rank,
+        "user_max_slots": current_user.max_word_slots,
+        "demo_words_added": added_count,
+        "loaded_language": target_lang
+    }

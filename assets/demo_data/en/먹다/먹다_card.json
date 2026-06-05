@@ -1,0 +1,41 @@
+{
+    "word": "먹다",
+    "target_language": "en",
+    "pronunciation": "Meokda",
+    "pos_type": "동사",
+    "semantic_category": "인공물 - 에너지/자원",
+    "definition_korean": "음식 등을 입을 통하여 배 속에 들여보내다.",
+    "definition_translated": "To put food or something into your stomach through your mouth.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "저는 어제 김치찌개를 먹었어요.",
+            "translation": "I ate kimchi stew yesterday.",
+            "audio_path": "assets/demo_data/en/먹다/먹다_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/en/먹다/먹다_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저는 매일 아침 밥을 먹어요.",
+            "translation": "I eat rice every morning.",
+            "audio_path": "assets/demo_data/en/먹다/먹다_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/en/먹다/먹다_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "내일 친구와 같이 피자를 먹을 거예요.",
+            "translation": "I will eat pizza with my friend tomorrow.",
+            "audio_path": "assets/demo_data/en/먹다/먹다_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/en/먹다/먹다_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/en/먹다/먹다_word.mp3",
+        "def_trans_tts": "assets/demo_data/en/먹다/먹다_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/en/먹다/먹다_ex_1.mp3",
+            "assets/demo_data/en/먹다/먹다_ex_2.mp3",
+            "assets/demo_data/en/먹다/먹다_ex_3.mp3"
+        ]
+    }
+}

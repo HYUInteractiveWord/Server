@@ -1,0 +1,41 @@
+{
+    "word": "자다",
+    "target_language": "en",
+    "pronunciation": "jada",
+    "pos_type": "동사",
+    "semantic_category": "기타",
+    "definition_korean": "눈을 감고 몸과 정신의 활동을 멈추고 한동안 쉬는 상태가 되다.",
+    "definition_translated": "To sleep means to close your eyes and rest your body and mind for a while.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "어제 일찍 잤어요.",
+            "translation": "I slept early yesterday.",
+            "audio_path": "assets/demo_data/en/자다/자다_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/en/자다/자다_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저는 매일 밤 잠을 자요.",
+            "translation": "I sleep every night.",
+            "audio_path": "assets/demo_data/en/자다/자다_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/en/자다/자다_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "내일 일찍 잘 거예요.",
+            "translation": "I will sleep early tomorrow.",
+            "audio_path": "assets/demo_data/en/자다/자다_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/en/자다/자다_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/en/자다/자다_word.mp3",
+        "def_trans_tts": "assets/demo_data/en/자다/자다_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/en/자다/자다_ex_1.mp3",
+            "assets/demo_data/en/자다/자다_ex_2.mp3",
+            "assets/demo_data/en/자다/자다_ex_3.mp3"
+        ]
+    }
+}

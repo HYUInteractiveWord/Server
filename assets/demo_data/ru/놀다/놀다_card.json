@@ -1,0 +1,41 @@
+{
+    "word": "놀다",
+    "target_language": "ru",
+    "pronunciation": "놀다: нольда",
+    "pos_type": "동사",
+    "semantic_category": "인문사회학 - 역사학",
+    "definition_korean": "놀이 등을 하면서 재미있고 즐겁게 지내다.",
+    "definition_translated": "Играть (놀다) означает проводить время весело и приятно, занимаясь играми или развлечениями.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "어제 친구들과 공원에서 재미있게 놀았어요.",
+            "translation": "Вчера я весело играл с друзьями в парке.",
+            "audio_path": "assets/demo_data/ru/놀다/놀다_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/ru/놀다/놀다_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저는 주말마다 게임을 하며 놀아요.",
+            "translation": "Я играю (развлекаюсь) в игры каждые выходные.",
+            "audio_path": "assets/demo_data/ru/놀다/놀다_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/ru/놀다/놀다_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "내일 가족들과 같이 공원에서 놀 거예요.",
+            "translation": "Завтра я буду играть с семьей в парке.",
+            "audio_path": "assets/demo_data/ru/놀다/놀다_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/ru/놀다/놀다_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/ru/놀다/놀다_word.mp3",
+        "def_trans_tts": "assets/demo_data/ru/놀다/놀다_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/ru/놀다/놀다_ex_1.mp3",
+            "assets/demo_data/ru/놀다/놀다_ex_2.mp3",
+            "assets/demo_data/ru/놀다/놀다_ex_3.mp3"
+        ]
+    }
+}

@@ -1,0 +1,41 @@
+{
+    "word": "기분",
+    "target_language": "en",
+    "pronunciation": "gibun",
+    "pos_type": "명사",
+    "semantic_category": "인문사회학 - 심리",
+    "definition_korean": "불쾌, 유쾌, 우울, 분노 등의 감정 상태.",
+    "definition_translated": "It means the state of your feelings, such as being unhappy, happy, sad, or angry.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "제 기분이 좋아요.",
+            "translation": "My mood is good.",
+            "audio_path": "assets/demo_data/en/기분/기분_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/en/기분/기분_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "그의 기분은 안 좋아요.",
+            "translation": "His mood is not good.",
+            "audio_path": "assets/demo_data/en/기분/기분_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/en/기분/기분_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "나는 기분을 바꾸고 싶어요.",
+            "translation": "I want to change my mood.",
+            "audio_path": "assets/demo_data/en/기분/기분_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/en/기분/기분_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/en/기분/기분_word.mp3",
+        "def_trans_tts": "assets/demo_data/en/기분/기분_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/en/기분/기분_ex_1.mp3",
+            "assets/demo_data/en/기분/기분_ex_2.mp3",
+            "assets/demo_data/en/기분/기분_ex_3.mp3"
+        ]
+    }
+}

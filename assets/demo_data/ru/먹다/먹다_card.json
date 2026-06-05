@@ -1,0 +1,41 @@
+{
+    "word": "먹다",
+    "target_language": "ru",
+    "pronunciation": "먹다 (меокта)",
+    "pos_type": "동사",
+    "semantic_category": "인공물 - 에너지/자원",
+    "definition_korean": "음식 등을 입을 통하여 배 속에 들여보내다.",
+    "definition_translated": "Помещать пищу в желудок через рот.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "저는 어제 김치를 먹었어요.",
+            "translation": "Я ел кимчи вчера.",
+            "audio_path": "assets/demo_data/ru/먹다/먹다_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/ru/먹다/먹다_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "지금 저는 밥을 먹어요.",
+            "translation": "Сейчас я ем рис.",
+            "audio_path": "assets/demo_data/ru/먹다/먹다_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/ru/먹다/먹다_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "내일 친구와 같이 피자를 먹을 거예요.",
+            "translation": "Завтра я съем пиццу с другом.",
+            "audio_path": "assets/demo_data/ru/먹다/먹다_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/ru/먹다/먹다_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/ru/먹다/먹다_word.mp3",
+        "def_trans_tts": "assets/demo_data/ru/먹다/먹다_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/ru/먹다/먹다_ex_1.mp3",
+            "assets/demo_data/ru/먹다/먹다_ex_2.mp3",
+            "assets/demo_data/ru/먹다/먹다_ex_3.mp3"
+        ]
+    }
+}

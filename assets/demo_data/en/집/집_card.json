@@ -1,0 +1,41 @@
+{
+    "word": "집",
+    "target_language": "en",
+    "pronunciation": "Jip",
+    "pos_type": "명사",
+    "semantic_category": "인공물 - 건설/교통",
+    "definition_korean": "사람이나 동물이 추위나 더위 등을 막고 그 속에 들어 살기 위해 지은 건물.",
+    "definition_translated": "A house is a building built for people or animals to live in, protecting them from cold or heat.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "저 집이 우리 집이에요.",
+            "translation": "That house is our home.",
+            "audio_path": "assets/demo_data/en/집/집_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/en/집/집_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "그 건물은 집입니다.",
+            "translation": "That building is a house.",
+            "audio_path": "assets/demo_data/en/집/집_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/en/집/집_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "나는 큰 집을 좋아해요.",
+            "translation": "I like big houses.",
+            "audio_path": "assets/demo_data/en/집/집_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/en/집/집_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/en/집/집_word.mp3",
+        "def_trans_tts": "assets/demo_data/en/집/집_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/en/집/집_ex_1.mp3",
+            "assets/demo_data/en/집/집_ex_2.mp3",
+            "assets/demo_data/en/집/집_ex_3.mp3"
+        ]
+    }
+}

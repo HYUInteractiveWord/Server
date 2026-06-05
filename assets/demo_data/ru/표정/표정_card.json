@@ -1,0 +1,41 @@
+{
+    "word": "표정",
+    "target_language": "ru",
+    "pronunciation": "пёджон",
+    "pos_type": "명사",
+    "semantic_category": "자연 - 화학",
+    "definition_korean": "마음속에 품은 감정이나 생각 등이 얼굴에 드러남. 또는 그런 모습.",
+    "definition_translated": "Выражение чувств или мыслей, которые находятся в душе, на лице. Или сам такой вид.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "그의 표정이 슬퍼 보였어요.",
+            "translation": "Его выражение лица выглядело грустным.",
+            "audio_path": "assets/demo_data/ru/표정/표정_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/ru/표정/표정_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "내 표정은 괜찮아요.",
+            "translation": "Мое выражение лица в порядке.",
+            "audio_path": "assets/demo_data/ru/표정/표정_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/ru/표정/표정_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "그는 웃는 표정을 지었어요.",
+            "translation": "Он сделал улыбающееся выражение лица.",
+            "audio_path": "assets/demo_data/ru/표정/표정_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/ru/표정/표정_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/ru/표정/표정_word.mp3",
+        "def_trans_tts": "assets/demo_data/ru/표정/표정_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/ru/표정/표정_ex_1.mp3",
+            "assets/demo_data/ru/표정/표정_ex_2.mp3",
+            "assets/demo_data/ru/표정/표정_ex_3.mp3"
+        ]
+    }
+}

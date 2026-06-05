@@ -1,0 +1,41 @@
+{
+    "word": "기분",
+    "target_language": "ru",
+    "pronunciation": "Кибун",
+    "pos_type": "명사",
+    "semantic_category": "인문사회학 - 심리",
+    "definition_korean": "불쾌, 유쾌, 우울, 분노 등의 감정 상태.",
+    "definition_translated": "Настроение — это состояние эмоций, такое как неприятное, приятное, грустное или гневное.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "오늘 기분이 좋아요.",
+            "translation": "Сегодня у меня хорошее настроение.",
+            "audio_path": "assets/demo_data/ru/기분/기분_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/ru/기분/기분_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "그의 기분은 안 좋아요.",
+            "translation": "Его настроение нехорошее.",
+            "audio_path": "assets/demo_data/ru/기분/기분_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/ru/기분/기분_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "기분을 좋게 만들어요.",
+            "translation": "Это улучшает настроение.",
+            "audio_path": "assets/demo_data/ru/기분/기분_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/ru/기분/기분_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/ru/기분/기분_word.mp3",
+        "def_trans_tts": "assets/demo_data/ru/기분/기분_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/ru/기분/기분_ex_1.mp3",
+            "assets/demo_data/ru/기분/기분_ex_2.mp3",
+            "assets/demo_data/ru/기분/기분_ex_3.mp3"
+        ]
+    }
+}

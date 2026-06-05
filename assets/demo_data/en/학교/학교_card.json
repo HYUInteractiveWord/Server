@@ -1,0 +1,41 @@
+{
+    "word": "학교",
+    "target_language": "en",
+    "pronunciation": "hakgyo",
+    "pos_type": "명사",
+    "semantic_category": "인문사회학 - 교육",
+    "definition_korean": "일정한 목적, 교과 과정, 제도 등에 따라 학생을 교육하는 기관.",
+    "definition_translated": "A school is an institution where students are educated according to a certain purpose, curriculum, or system.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "학교가 재미있어요.",
+            "translation": "The school is fun.",
+            "audio_path": "assets/demo_data/en/학교/학교_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/en/학교/학교_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저희 집은 학교입니다.",
+            "translation": "My house is a school.",
+            "audio_path": "assets/demo_data/en/학교/학교_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/en/학교/학교_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저는 학교에 가요.",
+            "translation": "I go to school.",
+            "audio_path": "assets/demo_data/en/학교/학교_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/en/학교/학교_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/en/학교/학교_word.mp3",
+        "def_trans_tts": "assets/demo_data/en/학교/학교_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/en/학교/학교_ex_1.mp3",
+            "assets/demo_data/en/학교/학교_ex_2.mp3",
+            "assets/demo_data/en/학교/학교_ex_3.mp3"
+        ]
+    }
+}

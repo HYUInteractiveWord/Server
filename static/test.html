@@ -11,8 +11,8 @@
         .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
         
         /* 탭 스타일 */
-        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
-        .tab-btn { background: none; border: none; padding: 10px 20px; font-size: 1.1em; cursor: pointer; color: #64748b; margin-right: 5px; border-radius: 8px 8px 0 0; }
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; flex-wrap: wrap; }
+        .tab-btn { background: none; border: none; padding: 10px 15px; font-size: 1.05em; cursor: pointer; color: #64748b; margin-right: 5px; margin-bottom: 5px; border-radius: 8px 8px 0 0; }
         .tab-btn.active { background: #4f46e5; color: white; font-weight: bold; }
         
         /* 언어 설정 컨테이너 */
@@ -26,7 +26,9 @@
         .log-label { font-weight: bold; color: #38bdf8; display: block; margin-bottom: 2px; }
         .log-value { color: #f1f5f9; white-space: pre-wrap; word-break: break-all; font-family: 'Courier New', Courier, monospace; }
 
-        input[type="text"], select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 1em; margin-right: 10px; width: calc(100% - 150px); max-width: 300px; box-sizing: border-box; }
+        input[type="text"], select, textarea { padding: 10px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 1em; box-sizing: border-box; font-family: inherit; }
+        input[type="text"], select { margin-right: 10px; width: calc(100% - 150px); max-width: 300px; }
+        textarea { width: 100%; max-width: 100%; resize: vertical; }
         button { background-color: #4f46e5; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 1em; transition: background-color 0.2s; }
         button:hover { background-color: #4338ca; }
         button:disabled { background-color: #a5b4fc; cursor: not-allowed; }
@@ -77,6 +79,7 @@
         <button class="tab-btn active" id="btnScan" onclick="switchTab('scan')">🎤 음성 스캔</button>
         <button class="tab-btn" id="btnDict" onclick="switchTab('dict')">📖 다국어 사전 검색</button>
         <button class="tab-btn" id="btnEval" onclick="switchTab('eval')">🔬 정밀 발음 평가</button>
+        <button class="tab-btn" id="btnMultiGen" onclick="switchTab('multi')">📦 일괄 데모 생성</button>
     </div>
 
     <div id="sectionScan">
@@ -223,6 +226,36 @@
         </div>
     </div>
 
+    <div id="sectionMulti" style="display: none;">
+        <div class="card" style="border: 2px solid #8b5cf6;">
+            <h3 style="color: #6d28d9;">📦 일괄 단어장 생성기 (Demo Data Seeding)</h3>
+            <p style="font-size: 0.85em; color: #666; margin-bottom: 20px;">
+                여러 단어를 한 번에 입력하여 <strong>지정한 폴더</strong>에 JSON 및 오디오 파일 세트를 일괄 생성합니다.<br>
+                생성된 데이터는 향후 '데모 모드' 버튼 클릭 시 유저 DB로 즉시 복사하는 용도로 활용할 수 있습니다.
+            </p>
+
+            <div style="margin-bottom: 15px;">
+                <label style="display:block; font-weight:bold; margin-bottom:5px; color: #334155;">저장할 커스텀 폴더 경로:</label>
+                <input type="text" id="multiOutputDir" placeholder="예: assets/demo_data" value="assets/demo_data" style="width: 100%; max-width: 100%;">
+                <p style="font-size: 0.8em; color: #94a3b8; margin-top: 4px;">지정하지 않으면 백엔드 기본 경로에 저장됩니다.</p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display:block; font-weight:bold; margin-bottom:5px; color: #334155;">생성할 단어 목록 (쉼표 또는 줄바꿈으로 구분):</label>
+                <textarea id="multiWordsInput" rows="5" placeholder="예시:&#10;사과, 병원&#10;출발하다&#10;행복하다" style="width: 100%;"></textarea>
+            </div>
+
+            <button id="multiGenerateBtn" onclick="generateMultiData()" style="background-color: #8b5cf6; width: 100%; padding: 15px; font-size: 1.1em; font-weight: bold;">
+                🚀 일괄 생성 시작
+            </button>
+            <div id="multiLoader" class="loader" style="color: #8b5cf6; text-align: center; margin-top: 15px;">
+                대량의 LLM 및 TTS 파이프라인을 가동 중입니다...<br>(단어 수에 따라 수 분이 소요될 수 있으니 창을 닫지 마세요)
+            </div>
+
+            <div id="multiResultLog" class="analysis-log" style="display: none; margin-top: 20px;"></div>
+        </div>
+    </div>
+
     <div class="card" id="step3" style="display: none;">
         <h3>Step 3. 생성된 K-Recorder 단어장</h3>
         <p style="font-size: 0.85em; color: #f43f5e;" id="pointWarning"></p>
@@ -239,9 +272,10 @@
         let evalMediaRecorder;
         let evalAudioChunks = [];
 
+        // 💡 탭 전환 함수 수정 (multi 추가)
         function switchTab(tabName) {
-            ['btnScan', 'btnDict', 'btnEval'].forEach(id => document.getElementById(id).classList.remove('active'));
-            ['sectionScan', 'sectionDict', 'sectionEval', 'step3'].forEach(id => document.getElementById(id).style.display = 'none');
+            ['btnScan', 'btnDict', 'btnEval', 'btnMultiGen'].forEach(id => document.getElementById(id).classList.remove('active'));
+            ['sectionScan', 'sectionDict', 'sectionEval', 'sectionMulti', 'step3'].forEach(id => document.getElementById(id).style.display = 'none');
 
             if(tabName === 'scan') {
                 document.getElementById('btnScan').classList.add('active');
@@ -249,12 +283,16 @@
             } else if (tabName === 'dict') {
                 document.getElementById('btnDict').classList.add('active');
                 document.getElementById('sectionDict').style.display = 'block';
-            } else {
+            } else if (tabName === 'eval') {
                 document.getElementById('btnEval').classList.add('active');
                 document.getElementById('sectionEval').style.display = 'block';
+            } else if (tabName === 'multi') {
+                document.getElementById('btnMultiGen').classList.add('active');
+                document.getElementById('sectionMulti').style.display = 'block';
             }
         }
 
+        // --- 기존 함수들 (uploadAudio, searchDict 등)은 그대로 유지됨 ---
         async function uploadAudio() {
             const fileInput = document.getElementById('audioFile');
             if (!fileInput.files[0]) { alert("오디오 파일을 선택해주세요."); return; }
@@ -597,6 +635,7 @@
             }
         }
 
+        // Eval 탭 함수들 유지
         function loadWordsFromFolder(event) {
             const files = event.target.files;
             if (!files || files.length === 0) return;
@@ -725,6 +764,67 @@
                 alert("정밀 평가 에러: " + e.message);
             } finally {
                 document.getElementById('evalLoader').style.display = 'none';
+            }
+        }
+
+        // 💡 새로 추가된 일괄 생성(Multi-Gen) API 호출 함수
+        async function generateMultiData() {
+            const rawWords = document.getElementById('multiWordsInput').value;
+            const outputDir = document.getElementById('multiOutputDir').value.trim();
+            const targetLang = document.getElementById('targetLang').value;
+
+            const wordsList = rawWords.split(/[\n,]+/).map(w => w.trim()).filter(w => w.length > 0);
+
+            if (wordsList.length === 0) {
+                alert("생성할 단어를 하나 이상 입력해주세요.");
+                return;
+            }
+
+            document.getElementById('multiLoader').style.display = 'block';
+            document.getElementById('multiGenerateBtn').disabled = true;
+            
+            const logDiv = document.getElementById('multiResultLog');
+            logDiv.style.display = 'none';
+            logDiv.innerHTML = '';
+
+            try {
+
+                const response = await fetch('http://127.0.0.1:8000/api/words/admin/generate_bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        words: wordsList,
+                        output_dir: outputDir,
+                        target_language: targetLang
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.detail || `서버 오류 (HTTP ${response.status})`);
+                }
+
+                const data = await response.json();
+
+                logDiv.style.display = 'block';
+                logDiv.style.borderColor = '#4ade80';
+                logDiv.innerHTML = `
+                    <h4 style="color: #4ade80;">✅ 생성 완료</h4>
+                    <p>총 <strong>${data.success_count || wordsList.length}</strong>개의 단어 세트가 생성되었습니다.</p>
+                    <p>저장 폴더: <code>${outputDir}</code></p>
+                `;
+
+            } catch (err) {
+                alert("일괄 생성 중 오류 발생: " + err.message);
+                logDiv.style.display = 'block';
+                logDiv.style.borderColor = '#f87171';
+                logDiv.innerHTML = `
+                    <h4 style="color: #f87171;">❌ 오류 발생</h4>
+                    <p>${err.message}</p>
+                `;
+            } finally {
+                document.getElementById('multiLoader').style.display = 'none';
+                document.getElementById('multiGenerateBtn').disabled = false;
             }
         }
     </script>

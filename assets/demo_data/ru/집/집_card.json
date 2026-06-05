@@ -1,0 +1,41 @@
+{
+    "word": "집",
+    "target_language": "ru",
+    "pronunciation": "집 (Jip)",
+    "pos_type": "명사",
+    "semantic_category": "인공물 - 건설/교통",
+    "definition_korean": "사람이나 동물이 추위나 더위 등을 막고 그 속에 들어 살기 위해 지은 건물.",
+    "definition_translated": "Дом — это здание, которое люди или животные строят, чтобы защититься от холода или жары и жить в нем.",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "저 집은 아주 커요.",
+            "translation": "Этот дом очень большой.",
+            "audio_path": "assets/demo_data/ru/집/집_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/ru/집/집_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "이곳이 우리 집이에요.",
+            "translation": "Это наш дом.",
+            "audio_path": "assets/demo_data/ru/집/집_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/ru/집/집_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저는 새 집에 가고 싶어요.",
+            "translation": "Я хочу пойти в новый дом.",
+            "audio_path": "assets/demo_data/ru/집/집_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/ru/집/집_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/ru/집/집_word.mp3",
+        "def_trans_tts": "assets/demo_data/ru/집/집_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/ru/집/집_ex_1.mp3",
+            "assets/demo_data/ru/집/집_ex_2.mp3",
+            "assets/demo_data/ru/집/집_ex_3.mp3"
+        ]
+    }
+}
