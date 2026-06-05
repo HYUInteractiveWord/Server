@@ -79,6 +79,9 @@ async def create_demo_user_and_login(
         email=dbody.email,
         hashed_password=hash_password(dbody.password),
         preferred_language=dbody.preferred_language,
+        xp=10000, 
+        rank="Emerald",
+        max_word_slots=100
     )
     db.add(user)
     db.flush()
@@ -106,6 +109,13 @@ async def create_demo_user_and_login(
             cards_data = json.load(f)
             
         for data in cards_data:
+            existing_word = db.query(WordCard).filter(
+                WordCard.user_id == user.id,
+                WordCard.korean_word == data.get("word")
+            ).first()
+            
+            if existing_word:
+                continue
             audio = data.get("audio", {})
             word_tts = audio.get("word_tts", "")
             def_tts = audio.get("def_trans_tts", "")
