@@ -1,7 +1,6 @@
-from datetime import date, datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.db import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -17,8 +16,6 @@ DAILY_MISSION_TEMPLATES = [
     {"mission_type": "daily_word_quiz", "target": 1, "xp_reward": 150},
     {"mission_type": "daily_collect_noun", "target": 1, "xp_reward": 100},
 ]
-
-
 
 def _get_or_create_daily_missions(user_id: int, db: Session) -> list[Mission]:
     today = datetime.now(timezone(timedelta(hours=9))).date()
@@ -79,7 +76,6 @@ def get_my_missions(
 ):
     return _get_or_create_daily_missions(current_user.id, db)
 
-
 @router.get("/daily", response_model=list[MissionResponse])
 def get_daily_missions(
     db: Session = Depends(get_db),
@@ -87,7 +83,6 @@ def get_daily_missions(
 ):
     """오늘의 일일 미션 반환. 없으면 자동 생성."""
     return _get_or_create_daily_missions(current_user.id, db)
-
 
 @router.post("/{mission_id}/complete", response_model=MissionResponse)
 def complete_mission(mission_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -105,6 +100,7 @@ def complete_mission(mission_id: int, db: Session = Depends(get_db), current_use
         current_user.rank = new_rank
         current_user.max_word_slots = RANK_WORD_SLOTS.get(new_rank, 20)
 
+    # 2. 삭제 전 반환용 데이터 복사 (DetachedError 방지)
     mission_response_data = {
         "id": mission.id,
         "user_id": mission.user_id,
@@ -119,7 +115,7 @@ def complete_mission(mission_id: int, db: Session = Depends(get_db), current_use
         "last_reset_date": mission.last_reset_date
     }
 
-    # 2.미션을 삭제하여 다음 호출 시 자동으로 새 미션이 생성되게 함
     db.delete(mission) 
     db.commit()
+    
     return mission_response_data
