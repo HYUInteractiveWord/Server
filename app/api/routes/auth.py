@@ -63,8 +63,7 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.post("/demo", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_demo_user_and_login(
-    preferred_language: str = "en",
-    db: Session = Depends(get_db)
+    body: UserCreate, db: Session = Depends(get_db)
 ):
     """
     [앱 연동용] 데모 유저를 즉시 생성하고 10000 XP를 부여한 뒤, 
@@ -90,7 +89,7 @@ async def create_demo_user_and_login(
     db.refresh(user)
     
     # 2. 언어별 경로 설정 로직
-    target_lang = preferred_language.strip().lower().split("-")[0]
+    target_lang = body.preferred_language.strip().lower().split("-")[0]
     if target_lang not in ["ru", "en", "ko"]:
         target_lang = "ko"
         
@@ -112,7 +111,7 @@ async def create_demo_user_and_login(
             def_tts = audio.get("def_trans_tts", "")
             
             new_card = WordCard(
-                user_id=new_user.id,
+                user_id=user.id,
                 korean_word=data.get("word"),
                 source="demo",
                 pos=data.get("pos_type"),
@@ -126,7 +125,7 @@ async def create_demo_user_and_login(
             db.add(new_card)
         db.commit()
 
-    access_token = create_access_token(data={"sub": new_user.username})
+    access_token = create_access_token(data={"sub": user.username})
     
     return {
         "access_token": access_token,
