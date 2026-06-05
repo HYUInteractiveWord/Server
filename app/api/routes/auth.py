@@ -108,32 +108,39 @@ async def create_demo_user_and_login(
         with open(all_vocab_path, "r", encoding="utf-8") as f:
             cards_data = json.load(f)
             
-        for data in cards_data:
-            existing_word = db.query(WordCard).filter(
-                WordCard.user_id == user.id,
-                WordCard.korean_word == data.get("word")
-            ).first()
-            
-            if existing_word:
-                continue
-            audio = data.get("audio", {})
-            word_tts = audio.get("word_tts", "")
-            def_tts = audio.get("def_trans_tts", "")
-            
-            new_card = WordCard(
-                user_id=user.id,
-                korean_word=data.get("word"),
-                source="demo",
-                pos=data.get("pos_type"),
-                definition=data.get("definition_korean"),
-                definition_translated=data.get("definition_translated"),
-                pronunciation=data.get("pronunciation"),
-                example_sentences=data.get("examples", []),
-                tts_audio_path=word_tts.replace("\\", "/") if word_tts else None,
-                def_trans_audio_path=def_tts.replace("\\", "/") if def_tts else None,
-            )
-            db.add(new_card)
-        db.commit()   
+        print(f"DEBUG: 로드된 데이터 타입: {type(cards_data)}")
+        print(f"DEBUG: 전체 데이터 개수: {len(cards_data) if isinstance(cards_data, list) else '리스트 아님'}")
+        if not isinstance(cards_data, list):
+            print("ERROR: JSON 데이터가 리스트 형식이 아닙니다.")
+        else:
+            for i, data in enumerate(cards_data):
+                try:
+                    # 중복 체크
+                    if db.query(WordCard).filter(
+                        WordCard.user_id == user.id, 
+                        WordCard.korean_word == data.get("word")
+                    ).first():
+                        continue
+
+                    audio = data.get("audio", {})
+                    new_card = WordCard(
+                        user_id=user.id,
+                        korean_word=data.get("word"),
+                        source="demo",
+                        pos=data.get("pos_type"),
+                        definition=data.get("definition_korean"),
+                        definition_translated=data.get("definition_translated"),
+                        pronunciation=data.get("pronunciation"),
+                        example_sentences=data.get("examples", []),
+                        tts_audio_path=audio.get("word_tts", "").replace("\\", "/") if audio.get("word_tts") else None,
+                        def_trans_audio_path=audio.get("def_trans_tts", "").replace("\\", "/") if audio.get("def_trans_tts") else None,
+                    )
+                    db.add(new_card)
+                except Exception as e:
+                    print(f"ERROR: {i}번째 단어 추가 실패: {e}")
+                    continue 
+            db.commit()
+            print("INFO: 모든 단어 처리 완료 및 커밋 성공")
     return user
 @router.delete("/delete")
 def delete_current_user(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
