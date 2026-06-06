@@ -88,7 +88,7 @@ async def submit_pronunciation(
         user_pitch = make_serializable(analysis_data["plot_data"]["f0_usr"])
         ref_pitch = make_serializable(analysis_data["plot_data"]["f0_ref"])
         dtw_dist = make_serializable(analysis_data["pronunciation_detail"]["normalized_distance"])
-
+        detailed_scores = analysis_data["scores"]
         record = PronunciationRecord(
             user_id=current_user.id,
             word_card_id=word_card_id,
@@ -146,7 +146,6 @@ async def submit_pronunciation(
             for key, val in graph_data["graph_paths"].items():
                 formatted_graphs[key] = str(val)
 
-        detailed_scores = analysis_data["scores"]
 
         plot_data = analysis_data["plot_data"]
         raw_graph_json = {
