@@ -168,7 +168,7 @@ async def submit_pronunciation(
             "graphs": graph_data["graph_paths"],
             "word_point": card.word_point if card else 0,
             "effect_level": card.effect_level if card else 0,
-
+            "penalty_factor": float(penalty_factor),
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
                 "formant": float(detailed_scores["phoneme_score"]),
@@ -264,7 +264,7 @@ async def evaluate_pronunciation_test(
             "target_word": target_word,
             "evaluation": eval_result,
             "graphs": graph_data["graph_paths"],
-
+            "penalty_factor": float(penalty_factor),
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
                 "formant": float(detailed_scores["phoneme_score"]),

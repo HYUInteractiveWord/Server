@@ -184,12 +184,15 @@ def pitch_similarity_scores(f0_ref, f0_usr) -> dict:
 
 
 def duration_similarity_score(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict:
-    ref_duration = librosa.get_duration(y=y_ref, sr=sr_ref)
-    usr_duration = librosa.get_duration(y=y_usr, sr=sr_usr)
+    y_ref_trimmed, _ = librosa.effects.trim(y_ref, top_db=30)
+    y_usr_trimmed, _ = librosa.effects.trim(y_usr, top_db=30)
+    ref_duration = librosa.get_duration(y=y_ref_trimmed, sr=sr_ref)
+    usr_duration = librosa.get_duration(y=y_usr_trimmed, sr=sr_usr)
 
     error = abs(ref_duration - usr_duration) / max(ref_duration, 1e-6)
 
-    tolerance = 0.50 if ref_duration < 0.6 else 0.20 
+    # 짧은 단어(0.6초 미만)는 오차 허용치를 50%까지 넉넉하게
+    tolerance = 0.50 if ref_duration < 0.6 else 0.20
     if error <= tolerance:
         score = 100.0 - (error * 50.0)
     else:
