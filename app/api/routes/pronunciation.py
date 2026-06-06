@@ -110,19 +110,16 @@ async def submit_pronunciation(
         if card:
             card.speaking_count = (card.speaking_count or 0) + 1
             
-            # 1. 단어 포인트(word_point) 증가
-            if final_score >= 60:
-                card.word_point = (card.word_point or 0) + int(final_score / 10)
-                card.effect_level = _effect_level_from_point(card.word_point)
-
-            # 2. 최고 점수 갱신 확인
             is_new_best = final_score > (card.best_score or 0.0)
             if is_new_best:
                 card.best_score = final_score
             
-            # 3. 단어 레벨(1~5) 갱신 (gamification.py의 함수 사용!)
-            new_level = update_word_level(card.level or 1, final_score)
-            card.level = new_level
+            if final_score >= 60:
+                base_point = int(final_score / 10)
+                bonus_point = 10 if is_new_best else 0 # 신기록이면 10점 추가
+                
+                card.word_point = (card.word_point or 0) + base_point + bonus_point
+                card.effect_level = _effect_level_from_point(card.word_point)
 
         # 4. 유저 XP 증가 (gamification.py의 함수 사용)
         xp_gained = calculate_xp_gain(final_score, is_new_best=is_new_best)
@@ -159,7 +156,6 @@ async def submit_pronunciation(
             "score": float(final_score),
             "is_new_best": is_new_best,
             "xp_gained": int(xp_gained),
-            "word_card_level": new_level,
             "graphs": graph_data["graph_paths"],
             "word_point": card.word_point if card else 0,
             "effect_level": card.effect_level if card else 0,
