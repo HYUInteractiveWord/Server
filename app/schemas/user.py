@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
-
+from typing import Optional
 
 class UserCreate(BaseModel):
     username: str
