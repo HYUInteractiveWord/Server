@@ -89,7 +89,7 @@ async def submit_pronunciation(
         ref_pitch = make_serializable(analysis_data["plot_data"]["f0_ref"])
         dtw_dist = make_serializable(analysis_data["pronunciation_detail"]["normalized_distance"])
 
-       record = PronunciationRecord(
+        record = PronunciationRecord(
             user_id=current_user.id,
             word_card_id=word_card_id,
             score=final_score,
