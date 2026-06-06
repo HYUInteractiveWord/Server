@@ -106,10 +106,11 @@ async def submit_pronunciation(
         ).first()
 
         new_level = 1
+        is_new_best = False
         if card:
             card.speaking_count = (card.speaking_count or 0) + 1
             
-            # 1. 단어 포인트(word_point) 증가 (예: 60점 이상 시)
+            # 1. 단어 포인트(word_point) 증가
             if final_score >= 60:
                 card.word_point = (card.word_point or 0) + int(final_score / 10)
                 card.effect_level = _effect_level_from_point(card.word_point)
@@ -160,6 +161,8 @@ async def submit_pronunciation(
             "xp_gained": int(xp_gained),
             "word_card_level": new_level,
             "graphs": graph_data["graph_paths"],
+            "word_point": card.word_point if card else 0,
+            "effect_level": card.effect_level if card else 0,
 
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
