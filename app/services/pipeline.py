@@ -463,7 +463,7 @@ class KoreanLearningPipeline:
             "en": "en-US-AriaNeural"
         }
         voice = voice_map.get(lang, "ko-KR-SunHiNeural")
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = edge_tts.Communicate(clean_text, voice)
         await communicate.save(output_path)
 
     async def phase1_analyze(self, raw_stt_text: str) -> dict:
