@@ -17,7 +17,7 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
-    email: str
+    email: Optional[EmailStr] = None
     xp: int
     rank: str
     max_word_slots: int
