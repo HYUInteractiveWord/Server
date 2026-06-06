@@ -76,6 +76,7 @@ async def submit_pronunciation(
         whisper_model = _get_whisper_model(settings.WHISPER_MODEL)
         evaluator = PronunciationEvaluator(whisper_model=whisper_model)
         
+        # 1. 평가 수행
         eval_result = evaluator.evaluate(
             target_word=korean_word,
             tts_audio_path=str(full_tts_path),
@@ -83,29 +84,9 @@ async def submit_pronunciation(
         )
         
         final_score = eval_result["final_score"]
-        penalty_factor = eval_result["penalty_factor"]
         analysis_data = eval_result["analysis_data"]
-        user_pitch = make_serializable(analysis_data["plot_data"]["f0_usr"])
-        ref_pitch = make_serializable(analysis_data["plot_data"]["f0_ref"])
-        dtw_dist = make_serializable(analysis_data["pronunciation_detail"]["normalized_distance"])
-        detailed_scores = analysis_data["scores"]
-        record = PronunciationRecord(
-            user_id=current_user.id,
-            word_card_id=word_card_id,
-            score=final_score,
-            pronunciation_score=float(detailed_scores.get("pronunciation_score", 0)),
-            formant_score=float(detailed_scores.get("phoneme_score", 0)),
-            pitch_score=float(detailed_scores.get("pitch_score", 0)),
-            timing_score=float(detailed_scores.get("duration_score", 0)),
-            is_intensity_good=bool(detailed_scores.get("intensity_pass", True)),
-            xp_gained=int(xp_gained),
-            penalty_factor=float(penalty_factor),
-            user_pitch_data=user_pitch,
-            reference_pitch_data=ref_pitch,
-            dtw_distance=dtw_dist,
-        )
-        db.add(record)
-
+        
+        # 2. 카드/포인트 관련 로직을 먼저 수행 (PronunciationRecord 생성 전)
         card = db.query(WordCard).filter(
             WordCard.id == word_card_id,
             WordCard.user_id == current_user.id,
@@ -122,14 +103,37 @@ async def submit_pronunciation(
             
             if final_score >= 60:
                 base_point = int(final_score / 10)
-                bonus_point = 10 if is_new_best else 0 # 신기록이면 10점 추가
-                
+                bonus_point = 10 if is_new_best else 0
                 card.word_point = (card.word_point or 0) + base_point + bonus_point
                 card.effect_level = _effect_level_from_point(card.word_point)
 
-        # 4. 유저 XP 증가 (gamification.py의 함수 사용)
+            new_level = update_word_level(card.level or 1, final_score)
+            card.level = new_level
+
         xp_gained = calculate_xp_gain(final_score, is_new_best=is_new_best)
         current_user.xp += xp_gained
+
+        user_pitch = make_serializable(analysis_data["plot_data"]["f0_usr"])
+        ref_pitch = make_serializable(analysis_data["plot_data"]["f0_ref"])
+        dtw_dist = make_serializable(analysis_data["pronunciation_detail"]["normalized_distance"])
+        detailed_scores = analysis_data["scores"]
+
+        record = PronunciationRecord(
+            user_id=current_user.id,
+            word_card_id=word_card_id,
+            score=final_score,
+            pronunciation_score=float(detailed_scores.get("pronunciation_score", 0)),
+            formant_score=float(detailed_scores.get("phoneme_score", 0)),
+            pitch_score=float(detailed_scores.get("pitch_score", 0)),
+            timing_score=float(detailed_scores.get("duration_score", 0)),
+            is_intensity_good=bool(detailed_scores.get("intensity_pass", True)),
+            xp_gained=int(xp_gained),
+            penalty_factor=float(eval_result["penalty_factor"]),
+            user_pitch_data=user_pitch,
+            reference_pitch_data=ref_pitch,
+            dtw_distance=dtw_dist,
+        )
+        db.add(record)
 
         db.commit()
         db.refresh(record)
