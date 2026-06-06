@@ -452,6 +452,11 @@ class KoreanLearningPipeline:
             return {"translated_definition": "", "easy_examples": [], "romanization": ""}
     async def generate_tts(self, text: str, output_path: str, lang: str = "ko"):
         if not text: return
+        clean_text = text.replace("/", ", ")
+        clean_text = re.sub(r'[*_~\[\]\(\)<>]', '', clean_text) 
+        clean_text = clean_text.strip()
+        
+        if not clean_text: return
         voice_map = {
             "ko": "ko-KR-SunHiNeural",
             "ru": "ru-RU-SvetlanaNeural",
