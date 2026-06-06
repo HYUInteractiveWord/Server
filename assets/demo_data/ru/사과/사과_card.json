@@ -1,5 +1,6 @@
 {
     "word": "사과",
+    "word_point": 50,
     "target_language": "ru",
     "pronunciation": "сагва",
     "pos_type": "명사",
