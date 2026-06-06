@@ -1,4 +1,6 @@
 from datetime import datetime, timezone, timedelta
+import os
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -42,6 +44,12 @@ class WordQuizItemResult(BaseModel):
 class WordQuizResultRequest(BaseModel):
     quiz_type: str = "meaning"
     results: list[WordQuizItemResult]
+
+
+class BulkGenerateRequest(BaseModel):
+    words: list[str]
+    output_dir: str = "assets/demo_data"
+    target_language: str = "ru"
 
 
 def _effect_level_from_point(point: int) -> int:
@@ -279,7 +287,15 @@ async def create_word_card(
     )
 
     if existing:
-        raise HTTPException(status_code=400, detail="Word already in your collection")
+        existing.word_point = (existing.word_point or 0) + 5
+        existing.effect_level = _effect_level_from_point(existing.word_point or 0)
+        current_user.xp += 10
+        _refresh_user_rank_and_slots(current_user)
+
+        db.commit()
+        db.refresh(existing)
+
+        return existing
 
     fallback_info = fetch_word_info(word)
 
@@ -374,9 +390,9 @@ def submit_word_quiz_result(
     단어 테스트 결과를 반영한다.
 
     - 정답 1개당 user.xp +10
-    - word_point/effect_level은 아직 변경하지 않음
+    - 정답 단어의 word_point +10
     - 테스트 1회 제출 시 daily_word_quiz 미션 progress +1
-    - 미션 보상 XP는 기존 /missions/{mission_id}/complete에서 별도 지급
+    - 미션 완료 조건을 만족하면 미션 보상 XP 지급
     """
     if not body.results:
         raise HTTPException(status_code=400, detail="Quiz result is empty")
@@ -416,8 +432,8 @@ def submit_word_quiz_result(
                 "id": card.id,
                 "korean_word": card.korean_word,
                 "is_correct": result.is_correct,
-                "word_point": card.word_point,  
-                "effect_level": card.effect_level, 
+                "word_point": card.word_point,
+                "effect_level": card.effect_level,
             }
         )
 
@@ -509,3 +525,42 @@ def delete_word_card(
 
     db.delete(card)
     db.commit()
+
+
+@router.post("/admin/generate_bulk")
+async def generate_bulk_data(body: BulkGenerateRequest):
+    """
+    [HTML 테스트 전용] 로그인 없이 다수의 단어를 한 번에 생성하여 지정된 폴더에 저장합니다.
+    """
+    os.makedirs(body.output_dir, exist_ok=True)
+
+    results = []
+    for word_str in body.words:
+        word = word_str.strip()
+        if not word:
+            continue
+
+        fallback_info = fetch_word_info(word)
+        selected_info = {
+            "pos": fallback_info.get("pos") or "명사",
+            "definition": fallback_info.get("definition") or "",
+        }
+
+        try:
+            cards = await nlp_pipeline.phase2_generate(
+                selected_words={word: selected_info},
+                output_dir=body.output_dir,
+                target_language=body.target_language,
+            )
+            if cards:
+                results.extend(cards)
+        except Exception as e:
+            print(f"[Bulk Gen Error] '{word}': {e}", flush=True)
+
+        await asyncio.sleep(0.5)
+
+    return {
+        "success_count": len(results),
+        "output_dir": body.output_dir,
+        "cards": results,
+    }

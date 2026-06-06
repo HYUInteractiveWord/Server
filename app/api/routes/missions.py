@@ -1,7 +1,6 @@
-from datetime import date, datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.db import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -17,8 +16,6 @@ DAILY_MISSION_TEMPLATES = [
     {"mission_type": "daily_word_quiz", "target": 1, "xp_reward": 150},
     {"mission_type": "daily_collect_noun", "target": 1, "xp_reward": 100},
 ]
-
-
 
 def _get_or_create_daily_missions(user_id: int, db: Session) -> list[Mission]:
     today = datetime.now(timezone(timedelta(hours=9))).date()
@@ -79,7 +76,6 @@ def get_my_missions(
 ):
     return _get_or_create_daily_missions(current_user.id, db)
 
-
 @router.get("/daily", response_model=list[MissionResponse])
 def get_daily_missions(
     db: Session = Depends(get_db),
@@ -88,37 +84,38 @@ def get_daily_missions(
     """오늘의 일일 미션 반환. 없으면 자동 생성."""
     return _get_or_create_daily_missions(current_user.id, db)
 
-
 @router.post("/{mission_id}/complete", response_model=MissionResponse)
-def complete_mission(
-    mission_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """미션 완료 처리 및 XP 지급."""
-    mission = db.query(Mission).filter(
-        Mission.id == mission_id,
-        Mission.user_id == current_user.id,
-    ).first()
+def complete_mission(mission_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    mission = db.query(Mission).filter(Mission.id == mission_id, Mission.user_id == current_user.id).first()
+    
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
-    if mission.is_completed:
-        raise HTTPException(status_code=400, detail="Mission already completed")
     if mission.progress < mission.target:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Mission not yet finished ({mission.progress}/{mission.target})",
-        )
+        raise HTTPException(status_code=400, detail="미션이 아직 완료되지 않았습니다.")
 
-    mission.is_completed = True
-    mission.completed_at = datetime.now(timezone.utc)
-
+    # 1. 보상 지급 및 랭크 반영
     current_user.xp += mission.xp_reward
     new_rank = get_rank_for_xp(current_user.xp)
     if new_rank != current_user.rank:
         current_user.rank = new_rank
-        current_user.max_word_slots = RANK_WORD_SLOTS[new_rank]
+        current_user.max_word_slots = RANK_WORD_SLOTS.get(new_rank, 20)
 
+    # 2. 삭제 전 반환용 데이터 복사 (DetachedError 방지)
+    mission_response_data = {
+        "id": mission.id,
+        "user_id": mission.user_id,
+        "mission_type": mission.mission_type,
+        "parameter": mission.parameter,
+        "progress": mission.progress,
+        "target": mission.target,
+        "is_completed": True,
+        "xp_reward": mission.xp_reward,
+        "created_at": mission.created_at,
+        "completed_at": datetime.now(timezone.utc),
+        "last_reset_date": mission.last_reset_date
+    }
+
+    db.delete(mission) 
     db.commit()
-    db.refresh(mission)
-    return mission
+    
+    return mission_response_data

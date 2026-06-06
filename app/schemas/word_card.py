@@ -9,6 +9,7 @@ class WordCardCreate(BaseModel):
     pos: Optional[str] = None
     definition: Optional[str]
     definition_translated: Optional[str] = None
+    pronunciation: Optional[str] = None
 
 
 class WordCardResponse(BaseModel):

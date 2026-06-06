@@ -1,0 +1,41 @@
+{
+    "word": "좋다",
+    "target_language": "en",
+    "pronunciation": "jota",
+    "pos_type": "형용사",
+    "semantic_category": "인문사회학 - 문화예술",
+    "definition_korean": "어떤 것의 성질이나 내용 등이 훌륭하여 만족할 만하다.",
+    "definition_translated": "good / satisfactory or excellent in quality or content",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "이 음식은 정말 좋은 맛이에요.",
+            "translation": "This food tastes really good.",
+            "audio_path": "assets/demo_data/en/좋다/좋다_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/en/좋다/좋다_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "오늘 날씨가 참 좋아요.",
+            "translation": "The weather is very nice today.",
+            "audio_path": "assets/demo_data/en/좋다/좋다_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/en/좋다/좋다_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "그 영화는 재미있고 좋았어요.",
+            "translation": "That movie was fun and good.",
+            "audio_path": "assets/demo_data/en/좋다/좋다_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/en/좋다/좋다_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/en/좋다/좋다_word.mp3",
+        "def_trans_tts": "assets/demo_data/en/좋다/좋다_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/en/좋다/좋다_ex_1.mp3",
+            "assets/demo_data/en/좋다/좋다_ex_2.mp3",
+            "assets/demo_data/en/좋다/좋다_ex_3.mp3"
+        ]
+    }
+}

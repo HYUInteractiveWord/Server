@@ -12,12 +12,12 @@ from app.models.user import User
 from app.models.word_card import WordCard
 from app.models.pronunciation_record import PronunciationRecord
 from app.schemas.pronunciation import PronunciationResponse
-from app.services.gamification import calculate_xp_gain
 from app.services.evaluation import PronunciationEvaluator
 from app.services.pipeline import _get_whisper_model
 from app.core.config import settings
 from app.services.pronunciation.service import save_all_pitch_graphs
-
+from app.api.routes.words import _effect_level_from_point
+from app.services.gamification import calculate_xp_gain, update_word_level
 router = APIRouter(prefix="/pronunciation", tags=["pronunciation"])
 
 def make_serializable(obj):
@@ -76,6 +76,7 @@ async def submit_pronunciation(
         whisper_model = _get_whisper_model(settings.WHISPER_MODEL)
         evaluator = PronunciationEvaluator(whisper_model=whisper_model)
         
+        # 1. 평가 수행
         eval_result = evaluator.evaluate(
             target_word=korean_word,
             tts_audio_path=str(full_tts_path),
@@ -84,48 +85,55 @@ async def submit_pronunciation(
         
         final_score = eval_result["final_score"]
         analysis_data = eval_result["analysis_data"]
-        
-        user_pitch = make_serializable(analysis_data["plot_data"]["f0_usr"])
-        ref_pitch = make_serializable(analysis_data["plot_data"]["f0_ref"])
-        dtw_dist = make_serializable(analysis_data["pronunciation_detail"]["normalized_distance"])
-
-        record = PronunciationRecord(
-            user_id=current_user.id,
-            word_card_id=word_card_id,
-            score=final_score,
-            user_pitch_data=user_pitch,
-            reference_pitch_data=ref_pitch,
-            dtw_distance=dtw_dist,
-        )
-        db.add(record)
-
+        penalty_factor = eval_result["penalty_factor"]
+        # 2. 카드/포인트 관련 로직을 먼저 수행 (PronunciationRecord 생성 전)
         card = db.query(WordCard).filter(
             WordCard.id == word_card_id,
             WordCard.user_id == current_user.id,
         ).first()
 
         new_level = 1
+        is_new_best = False
         if card:
             card.speaking_count = (card.speaking_count or 0) + 1
-            if final_score > (card.best_score or 0.0):
+            
+            is_new_best = final_score > (card.best_score or 0.0)
+            if is_new_best:
                 card.best_score = final_score
-                if final_score >= 93:
-                    new_level = 5
-                elif final_score >= 85:
-                    new_level = 4
-                elif final_score >= 75:
-                    new_level = 3
-                elif final_score >= 60:
-                    new_level = 2
-                else:
-                    new_level = 1
-                card.level = new_level
-            else:
-                new_level = card.level or 1
+            
+            if final_score >= 60:
+                base_point = int(final_score / 10)
+                bonus_point = 10 if is_new_best else 0
+                card.word_point = (card.word_point or 0) + base_point + bonus_point
+                card.effect_level = _effect_level_from_point(card.word_point)
 
-        is_new_best = card is not None and final_score >= (card.best_score or 0.0)
+            new_level = update_word_level(card.level or 1, final_score)
+            card.level = new_level
+
         xp_gained = calculate_xp_gain(final_score, is_new_best=is_new_best)
         current_user.xp += xp_gained
+
+        user_pitch = make_serializable(analysis_data["plot_data"]["f0_usr"])
+        ref_pitch = make_serializable(analysis_data["plot_data"]["f0_ref"])
+        dtw_dist = make_serializable(analysis_data["pronunciation_detail"]["normalized_distance"])
+        detailed_scores = analysis_data["scores"]
+
+        record = PronunciationRecord(
+            user_id=current_user.id,
+            word_card_id=word_card_id,
+            score=final_score,
+            pronunciation_score=float(detailed_scores.get("pronunciation_score", 0)),
+            formant_score=float(detailed_scores.get("phoneme_score", 0)),
+            pitch_score=float(detailed_scores.get("pitch_score", 0)),
+            timing_score=float(detailed_scores.get("duration_score", 0)),
+            is_intensity_good=bool(detailed_scores.get("intensity_pass", True)),
+            xp_gained=int(xp_gained),
+            penalty_factor=float(penalty_factor),
+            user_pitch_data=user_pitch,
+            reference_pitch_data=ref_pitch,
+            dtw_distance=dtw_dist,
+        )
+        db.add(record)
 
         db.commit()
         db.refresh(record)
@@ -142,7 +150,6 @@ async def submit_pronunciation(
             for key, val in graph_data["graph_paths"].items():
                 formatted_graphs[key] = str(val)
 
-        detailed_scores = analysis_data["scores"]
 
         plot_data = analysis_data["plot_data"]
         raw_graph_json = {
@@ -158,15 +165,17 @@ async def submit_pronunciation(
             "score": float(final_score),
             "is_new_best": is_new_best,
             "xp_gained": int(xp_gained),
-            "word_card_level": new_level,
             "graphs": graph_data["graph_paths"],
-
+            "word_point": card.word_point if card else 0,
+            "effect_level": card.effect_level if card else 0,
+            "penalty_factor": float(penalty_factor),
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
                 "formant": float(detailed_scores["phoneme_score"]),
                 "pitch": float(detailed_scores["pitch_score"]),
                 "timing": float(detailed_scores["duration_score"]),
-                "is_intensity_good": bool(detailed_scores["intensity_pass"])
+                "is_intensity_good": bool(detailed_scores["intensity_pass"]),
+                "total": float(final_score)
             },
 
             "raw_graph_data": raw_graph_json
@@ -216,8 +225,10 @@ async def evaluate_pronunciation_test(
             )
 
     full_tts_path = target_path
+    file_ext = os.path.splitext(audio.filename)[1] # .m4a, .aac 등
+    if not file_ext: file_ext = ".m4a"
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_user:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_user:
         tmp_user.write(audio_bytes)
         user_audio_path = tmp_user.name
 
@@ -253,7 +264,7 @@ async def evaluate_pronunciation_test(
             "target_word": target_word,
             "evaluation": eval_result,
             "graphs": graph_data["graph_paths"],
-
+            "penalty_factor": float(penalty_factor),
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
                 "formant": float(detailed_scores["phoneme_score"]),

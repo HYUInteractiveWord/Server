@@ -305,10 +305,31 @@ class KoreanLearningPipeline:
             return ""
 
     async def process_with_llm(self, word_raw: str, definition: str, pos: str, target_language: str = "en") -> dict:
-        """LLM 번역 및 품사별 문법 특화 예문 생성 (동사/명사/형용사별 분기 조건 적용)"""
+        """LLM 번역 및 품사별 문법 특화 예문 생성 (타겟 언어 원어 지시어 적용)"""
         target_lang_str = self._get_lang_str(target_language)
-        
-        romanization_instruction = '"단어의 한국어 발음을 [목표 언어]의 문자로 소리나는 대로 표기 (예: 러시아어면 키릴 문자로 표기)"'
+        lang_code = target_language.strip().lower().split("-")[0]
+        if lang_code == "ru":
+            romanization_instruction = (
+                '"Напишите произношение ТОЛЬКО ОДНОГО главного слова, указанного в поле [단어], русскими буквами (кириллицей). '
+                'КАТЕГОРИЧЕСКИ ЗАПРЕЩАЕТСЯ писать произношение сгенерированных предложений! '
+                'Только одно слово. Без латиницы, без хангыля, без скобок. Пример: иджа"'
+            )
+            trans_def_instruction = (
+                '"[Точный перевод в одно слово] / [Простое объяснение на русском языке]. '
+                'Не используйте корейский язык в этом поле. Обязательно разделяйте перевод и объяснение косой чертой (/). '
+                'Пример: стул / предмет мебели с приподнятой поверхностью, опирающийся на ножки"'
+            )
+        else:
+            romanization_instruction = (
+                '"Write the pronunciation of ONLY the single main word indicated in [단어] using the Latin alphabet. '
+                'ABSOLUTELY DO NOT write the pronunciation of the generated example sentences! '
+                'Just the one word. No Hangul, no parentheses. Example: uija"'
+            )
+            trans_def_instruction = (
+                '"[Exact 1:1 translation word] / [Simple explanation sentence in English]. '
+                'Do not use Korean at all in this field. You must separate the translation and explanation with a slash (/). '
+                'Example: chair / a piece of furniture with a raised surface supported by legs"'
+            )
         
         # 1. 동사 분기 프롬프트 (과거, 현재, 미래 시제 반영)
         if "동사" in pos or "Verb" in pos:
@@ -322,7 +343,7 @@ class KoreanLearningPipeline:
                 "- 세 번째 예문: 해당 동사의 '미래 시제(~을 것이다, ~겠습니다 등)' 형태가 들어간 예문\n\n"
                 "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
                 "{{\n"
-                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                f'  "translated_definition": {trans_def_instruction},\n'
                 '  "easy_examples": [\n'
                 '    {{"korean": "과거 시제 반영 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "현재 시제 반영 문장", "translation": "목표 언어 번역"}},\n'
@@ -344,7 +365,7 @@ class KoreanLearningPipeline:
                 "- 세 번째 예문: 해당 명사가 문장 내에서 '목적어(을/를 결합)'로 사용된 예문\n\n"
                 "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
                 "{{\n"
-                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                f'  "translated_definition": {trans_def_instruction},\n'
                 '  "easy_examples": [\n'
                 '    {{"korean": "명사가 주어로 쓰인 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "명사가 서술어로 쓰인 문장", "translation": "목표 언어 번역"}},\n'
@@ -366,7 +387,7 @@ class KoreanLearningPipeline:
                 "- 세 번째 예문: 해당 형용사가 문장 중간에서 연결어미나 부사형 어미 등과 결합하여 '다양한 변형 구조 위치(예: 예쁘게 자라다, 예쁘고 좋다)'로 쓰인 예문\n\n"
                 "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
                 "{{\n"
-                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                f'  "translated_definition": {trans_def_instruction},\n'
                 '  "easy_examples": [\n'
                 '    {{"korean": "명사 수식형 구조의 문장", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "문장 끝 서술형 구조의 문장", "translation": "목표 언어 번역"}},\n'
@@ -376,7 +397,29 @@ class KoreanLearningPipeline:
                 "}}"
             )
             
-        # 4. Fallback (기타 부사, 관형사 등 예외 품사용 기본 3개 구성 자동 방어)
+        # 4. 부사 분기 프롬프트
+        elif "부사" in pos or "Adverb" in pos:
+            prompt_text = (
+                "[단어]: {word_raw} ({pos})\n"
+                "[정의]: {definition}\n"
+                "[목표 언어]: {target_lang_str}\n\n"
+                "당신은 국어교육학 전문가입니다. 위 부사를 사용하여 초급 한국어 학습자를 위한 쉽고 명확한 예문 3개를 생성하되, 수식하는 대상과 문장 내 위치에 따라 다양하게 배치하세요.\n"
+                "- 첫 번째 예문: 해당 부사가 '동사' 바로 앞에서 동작의 상태나 정도를 꾸며주는 예문 (예: '빨리' 걷다, '잘' 먹다)\n"
+                "- 두 번째 예문: 해당 부사가 '형용사'나 '다른 부사' 앞에서 그 정도를 강조하는 예문 (예: '아주' 예쁘다, '너무' 빨리)\n"
+                "- 세 번째 예문: 문장 맨 앞이나 중간에서 문맥 전체의 분위기를 전환하거나 강조하는 예문\n\n"
+                "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
+                "{{\n"
+                f'  "translated_definition": {trans_def_instruction},\n'
+                '  "easy_examples": [\n'
+                '    {{"korean": "동사 수식형 예문", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "형용사/부사 강조형 예문", "translation": "목표 언어 번역"}},\n'
+                '    {{"korean": "문장 전체/분위기 수식형 예문", "translation": "목표 언어 번역"}}\n'
+                '  ],\n'
+                f'  "romanization": {romanization_instruction}\n'
+                "}}"
+            )
+            
+        # 5. Fallback
         else:
             prompt_text = (
                 "[단어]: {word_raw} ({pos})\n"
@@ -385,7 +428,7 @@ class KoreanLearningPipeline:
                 "당신은 국어교육학 전문가입니다. 위 단어를 문맥 내에 배치하여 결합 형태가 서로 다른 유용하고 명확한 예문 3개를 생성하세요.\n"
                 "반드시 아래 구조의 JSON 형식으로만 응답하세요:\n"
                 "{{\n"
-                '  "translated_definition": "[정의]를 목표 언어로 쉽게 설명한 문장",\n'
+                f'  "translated_definition": {trans_def_instruction},\n'
                 '  "easy_examples": [\n'
                 '    {{"korean": "활용 예문 1", "translation": "목표 언어 번역"}},\n'
                 '    {{"korean": "활용 예문 2", "translation": "목표 언어 번역"}},\n'
@@ -409,13 +452,18 @@ class KoreanLearningPipeline:
             return {"translated_definition": "", "easy_examples": [], "romanization": ""}
     async def generate_tts(self, text: str, output_path: str, lang: str = "ko"):
         if not text: return
+        clean_text = text.replace("/", ", ")
+        clean_text = re.sub(r'[*_~\[\]\(\)<>]', '', clean_text) 
+        clean_text = clean_text.strip()
+        
+        if not clean_text: return
         voice_map = {
             "ko": "ko-KR-SunHiNeural",
             "ru": "ru-RU-SvetlanaNeural",
             "en": "en-US-AriaNeural"
         }
         voice = voice_map.get(lang, "ko-KR-SunHiNeural")
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = edge_tts.Communicate(clean_text, voice)
         await communicate.save(output_path)
 
     async def phase1_analyze(self, raw_stt_text: str) -> dict:
@@ -475,53 +523,23 @@ class KoreanLearningPipeline:
             return {}
 
     async def generate_word_preview(self, word: str, definition: str, pos: str, output_dir: str, target_language: str = "en") -> dict:
-        """사전에서 선택한 단어의 정밀 프리뷰 생성 (발음 부호, 타겟언어 정의 번역 및 개별 뜻풀이 MP3 세트 일괄 빌드)"""
+        """
+        [최적화본] LLM 번역 및 뜻 TTS 생성을 생략하고, 표제어와 표제어 음성만 즉시 생성
+        """
         os.makedirs(output_dir, exist_ok=True)
-        print(f"\n[Preview] '{word}' 임시 확인용 데이터 생성 중...", flush=True)
-        
-        target_lang_str = self._get_lang_str(target_language)
-
-        prompt = PromptTemplate.from_template(
-            "당신은 한국어 교육 전문가입니다.\n"
-            "[단어]: {word}\n[품사]: {pos}\n[정의]: {definition}\n[목표 언어]: {target_lang_str}\n\n"
-            "이 단어에 대해 아래 JSON을 생성하세요:\n"
-            "1. translated_definition (정의를 '목표 언어'로 번역 또는 쉽게 설명)\n"
-            "2. romanization (단어의 정확한 로마자 발음 표기법)\n"
-            "{{\n"
-            '  "translated_definition": "...",\n'
-            '  "romanization": "..."\n'
-            "}}"
-        )
-        chain = prompt | self.llm | self.json_parser
-        try:
-            llm_result = await chain.ainvoke({
-                "word": word, 
-                "definition": definition, 
-                "pos": pos,
-                "target_lang_str": target_lang_str
-            })
-        except Exception as e:
-            print(f"  [Error] Preview LLM failed: {e}", flush=True)
-            llm_result = {"translated_definition": "", "romanization": ""}
-            
-        # 1. 한국어 표제어 음성 파일 생성
+        print(f"\n[Preview] '{word}' 고속 프리뷰 데이터 생성 중...", flush=True)
         word_audio_path = build_path(output_dir, f"temp_{word}_word.mp3")
         await self.generate_tts(word, word_audio_path, lang="ko")
-        
-        # 2. 번역 뜻 외국어(러시아어/영어 등) 음성 파일 빌드 추가
-        translated_def_text = llm_result.get("translated_definition", "")
-        def_trans_audio_path = build_path(output_dir, f"temp_{word}_def_trans.mp3")
-        await self.generate_tts(translated_def_text, def_trans_audio_path, lang=target_language)
         
         return {
             "word": word,
             "target_language": target_language,
             "pos_type": pos,
             "definition_korean": definition,
-            "definition_translated": translated_def_text,
-            "pronunciation": llm_result.get("romanization", ""),
+            "definition_translated": definition, # 번역 대신 원문 그대로 전달 (어차피 앱에서 안 보여줌)
+            "pronunciation": "",                # 로마자 표기도 생략 (LLM이 필요하므로)
             "audio_path": word_audio_path,
-            "def_trans_audio_path": def_trans_audio_path 
+            "def_trans_audio_path": None        # 뜻 음성 경로는 없음으로 처리
         }
 
     async def verify_spoken_word(self, audio_bytes: bytes, ffmpeg_bin: str, whisper_model_size: str, target_word: str) -> dict:
@@ -639,10 +657,6 @@ class KoreanLearningPipeline:
             with open(build_path(word_dir, f"{word}_card.json"), 'w', encoding='utf-8') as f:
                 json.dump(word_card, f, ensure_ascii=False, indent=4)
         
-
-        if final_cards:
-            with open(build_path(output_dir, "all_vocab_cards.json"), 'w', encoding='utf-8') as f:
-                json.dump(final_cards, f, ensure_ascii=False, indent=4)
                 
         print(f"  [Log] Phase 2 Total: {time.time() - t_start:.2f}s", flush=True)
         return final_cards

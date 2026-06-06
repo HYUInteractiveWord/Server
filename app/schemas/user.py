@@ -1,10 +1,10 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
-
+from typing import Optional
 
 class UserCreate(BaseModel):
     username: str
-    email: EmailStr
+    email: Optional[EmailStr] = None
     password: str
     preferred_language: str = "en"
 
@@ -17,7 +17,7 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
-    email: str
+    email: Optional[EmailStr] = None
     xp: int
     rank: str
     max_word_slots: int

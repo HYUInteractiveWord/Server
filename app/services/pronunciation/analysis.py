@@ -149,9 +149,18 @@ def extract_mfcc(y, sr: int, n_mfcc: int = 13):
     MFCC 추출 + 전역 정규화
     """
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+    n_frames = mfcc.shape[1]
     
-    delta = librosa.feature.delta(mfcc)
-    delta2 = librosa.feature.delta(mfcc, order=2)
+    if n_frames < 3:
+        delta = np.zeros_like(mfcc)
+        delta2 = np.zeros_like(mfcc)
+    else:
+        delta_width = min(9, n_frames)
+        if delta_width % 2 == 0:
+            delta_width -= 1
+            
+        delta = librosa.feature.delta(mfcc, width=delta_width)
+        delta2 = librosa.feature.delta(mfcc, order=2, width=delta_width)
     
     mfcc_combined = np.vstack([mfcc, delta, delta2])
     

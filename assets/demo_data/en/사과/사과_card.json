@@ -1,0 +1,42 @@
+{
+    "word": "사과",
+    "word_point": 50,
+    "target_language": "en",
+    "pronunciation": "sagwa",
+    "pos_type": "명사",
+    "semantic_category": "인문사회학 - 사회",
+    "definition_korean": "모양이 둥글고 붉으며 새콤하고 단맛이 나는 과일.",
+    "definition_translated": "apple / a round, red fruit that is both sour and sweet",
+    "examples": [
+        {
+            "type": "llm_generated",
+            "korean": "사과가 맛있어요.",
+            "translation": "The apple is delicious.",
+            "audio_path": "assets/demo_data/en/사과/사과_ex_1.mp3",
+            "trans_audio_path": "assets/demo_data/en/사과/사과_trans_ex_1.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "이것은 사과입니다.",
+            "translation": "This is an apple.",
+            "audio_path": "assets/demo_data/en/사과/사과_ex_2.mp3",
+            "trans_audio_path": "assets/demo_data/en/사과/사과_trans_ex_2.mp3"
+        },
+        {
+            "type": "llm_generated",
+            "korean": "저는 사과를 좋아해요.",
+            "translation": "I like apples.",
+            "audio_path": "assets/demo_data/en/사과/사과_ex_3.mp3",
+            "trans_audio_path": "assets/demo_data/en/사과/사과_trans_ex_3.mp3"
+        }
+    ],
+    "audio": {
+        "word_tts": "assets/demo_data/en/사과/사과_word.mp3",
+        "def_trans_tts": "assets/demo_data/en/사과/사과_def_trans.mp3",
+        "examples_tts": [
+            "assets/demo_data/en/사과/사과_ex_1.mp3",
+            "assets/demo_data/en/사과/사과_ex_2.mp3",
+            "assets/demo_data/en/사과/사과_ex_3.mp3"
+        ]
+    }
+}

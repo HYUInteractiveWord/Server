@@ -27,6 +27,7 @@ class WordCard(Base):
     effect_level = Column(Integer, default=0)
     # 수집 방법: "scan" | "dictionary"
     source = Column(String, default="dictionary")
+    pronunciation = Column(String, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

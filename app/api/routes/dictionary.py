@@ -144,16 +144,13 @@ async def search_dictionary(
 
 @router.post("/preview")
 async def get_word_preview(req: PreviewRequest):
-    """
-    사전 검색 후 단어장 추가 전, 뜻과 발음(TTS)만 임시로 생성하여 반환 (다국어 호환)
-    """
     output_dir = "static/tts/temp"
     result = await nlp_pipeline.generate_word_preview(
         word=req.word, 
         definition=req.definition, 
         pos=req.pos, 
         output_dir=output_dir,
-        target_language=req.target_language 
+        target_language=req.target_language
     )
     return result
 
