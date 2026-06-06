@@ -170,6 +170,7 @@ async def create_demo_user_and_login(
                                         ex["trans_audio_path"] = copy_and_get_new_path(ex["trans_audio_path"])
 
                             # DB 레코드 생성
+                            input_points = data.get("word_point", 0)
                             new_card = WordCard(
                                 user_id=user.id,
                                 korean_word=word,
@@ -181,6 +182,7 @@ async def create_demo_user_and_login(
                                 example_sentences=examples_data,
                                 tts_audio_path=word_tts,
                                 def_trans_audio_path=def_tts,
+                                word_point=input_points
                             )
                             db.add(new_card)
                             
