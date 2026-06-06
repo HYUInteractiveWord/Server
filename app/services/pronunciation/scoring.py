@@ -74,7 +74,7 @@ def pronunciation_score_mfcc_dtw(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict
     # ---------------------------------------------------------
     # 3. [파트 2] 구역별 점수 부여 (Local Chunk Scores) -> 각 10점 x 5구역 = 50점 만점
     # ---------------------------------------------------------
-    num_chunks = 5
+    num_chunks = max(1, min(5, len(local_distances)))
     chunk_size = max(1, len(local_distances) // num_chunks)
     
     chunk_errors = []
@@ -82,14 +82,15 @@ def pronunciation_score_mfcc_dtw(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict
     
     for i in range(num_chunks):
         start_idx = i * chunk_size
+        # 마지막 구간은 남은 데이터를 모두 포함하도록 처리
         end_idx = len(local_distances) if i == num_chunks - 1 else (i + 1) * chunk_size
         
         chunk_data = local_distances[start_idx:end_idx]
         
         if chunk_data:
             c_error = float(np.mean(chunk_data))
-            # 각 구역별 오차를 10점 만점 기준으로 채점
-            c_score = calculate_score(c_error, max_score=10.0)
+            max_score_per_chunk = 50.0 / num_chunks
+            c_score = calculate_score(c_error, max_score=max_score_per_chunk)
         else:
             c_error = global_error
             c_score = 0.0
