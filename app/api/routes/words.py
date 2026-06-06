@@ -307,7 +307,6 @@ def submit_word_quiz_result(
     단어 테스트 결과를 반영한다.
 
     - 정답 1개당 user.xp +10
-    - word_point/effect_level은 아직 변경하지 않음
     - 테스트 1회 제출 시 daily_word_quiz 미션 progress +1
     - 미션 보상 XP는 기존 /missions/{mission_id}/complete에서 별도 지급
     """
