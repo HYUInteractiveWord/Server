@@ -11,10 +11,19 @@ class PronunciationRecord(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     word_card_id = Column(Integer, ForeignKey("word_cards.id"), nullable=False)
 
-    score = Column(Float, nullable=False)         # 0~100
-    user_pitch_data = Column(JSON)                # 김성준 모듈에서 넘어오는 피치 배열
-    reference_pitch_data = Column(JSON)           # TTS 기준 피치 배열
-    dtw_distance = Column(Float)                  # raw DTW 거리 값
+    score = Column(Float, nullable=False)
+    
+    pronunciation_score = Column(Float)
+    formant_score = Column(Float)
+    pitch_score = Column(Float)
+    timing_score = Column(Float)
+    is_intensity_good = Column(Boolean)
+    
+    xp_gained = Column(Integer, default=0)
+
+    user_pitch_data = Column(JSON)
+    reference_pitch_data = Column(JSON)
+    dtw_distance = Column(Float)
 
     recorded_at = Column(DateTime(timezone=True), server_default=func.now())
 

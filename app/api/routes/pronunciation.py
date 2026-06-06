@@ -18,7 +18,6 @@ from app.core.config import settings
 from app.services.pronunciation.service import save_all_pitch_graphs
 from app.api.routes.words import _effect_level_from_point
 from app.services.gamification import calculate_xp_gain, update_word_level
-from app.api.routes.words import _effect_level_from_point
 router = APIRouter(prefix="/pronunciation", tags=["pronunciation"])
 
 def make_serializable(obj):
@@ -90,10 +89,17 @@ async def submit_pronunciation(
         ref_pitch = make_serializable(analysis_data["plot_data"]["f0_ref"])
         dtw_dist = make_serializable(analysis_data["pronunciation_detail"]["normalized_distance"])
 
-        record = PronunciationRecord(
+       record = PronunciationRecord(
             user_id=current_user.id,
             word_card_id=word_card_id,
             score=final_score,
+            pronunciation_score=float(detailed_scores.get("pronunciation_score", 0)),
+            formant_score=float(detailed_scores.get("phoneme_score", 0)),
+            pitch_score=float(detailed_scores.get("pitch_score", 0)),
+            timing_score=float(detailed_scores.get("duration_score", 0)),
+            is_intensity_good=bool(detailed_scores.get("intensity_pass", True)),
+            xp_gained=int(xp_gained),
+            
             user_pitch_data=user_pitch,
             reference_pitch_data=ref_pitch,
             dtw_distance=dtw_dist,

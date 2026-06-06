@@ -34,7 +34,14 @@ with engine.connect() as _conn:
     _conn.execute(text("ALTER TABLE users ALTER COLUMN email DROP NOT NULL"))
     _conn.execute(text("ALTER TABLE word_cards ADD COLUMN IF NOT EXISTS pronunciation VARCHAR"))
     _conn.commit()
-
+with engine.connect() as _conn:
+    _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS pronunciation_score FLOAT"))
+    _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS formant_score FLOAT"))
+    _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS pitch_score FLOAT"))
+    _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS timing_score FLOAT"))
+    _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS is_intensity_good BOOLEAN"))
+    _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS xp_gained INTEGER DEFAULT 0"))
+    _conn.commit()
 app = FastAPI(
     title="InteractiveWord API",
     description="인터렉티브 단어장 백엔드 API",
