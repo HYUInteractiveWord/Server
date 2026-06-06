@@ -18,7 +18,7 @@ class PronunciationRecord(Base):
     pitch_score = Column(Float)
     timing_score = Column(Float)
     is_intensity_good = Column(Boolean)
-    
+    penalty_factor = Column(Float, default=1.0)
     xp_gained = Column(Integer, default=0)
 
     user_pitch_data = Column(JSON)
@@ -28,3 +28,4 @@ class PronunciationRecord(Base):
     recorded_at = Column(DateTime(timezone=True), server_default=func.now())
 
     word_card = relationship("WordCard", back_populates="pronunciation_records")
+    penalty_factor = Column(Float, default=1.0)

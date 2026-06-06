@@ -41,6 +41,7 @@ with engine.connect() as _conn:
     _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS timing_score FLOAT"))
     _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS is_intensity_good BOOLEAN"))
     _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS xp_gained INTEGER DEFAULT 0"))
+    _conn.execute(text("ALTER TABLE pronunciation_records ADD COLUMN IF NOT EXISTS penalty_factor FLOAT DEFAULT 1.0"))
     _conn.commit()
 app = FastAPI(
     title="InteractiveWord API",
