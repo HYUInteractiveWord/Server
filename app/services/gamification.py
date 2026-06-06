@@ -37,14 +37,14 @@ def get_rank_for_xp(xp: int) -> str:
 
 
 def calculate_xp_gain(score: float, is_new_best: bool) -> int:
-    base = 10
+    base = 5
     if is_new_best:
-        base += 15
+        base += 10
     if score >= 90:
         base += 15
-    elif score >= 80:
-        base += 10
     elif score >= 70:
+        base += 10
+    elif score >= 50:
         base += 5
     return base
 
