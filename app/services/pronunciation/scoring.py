@@ -189,13 +189,13 @@ def duration_similarity_score(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict:
 
     error = abs(ref_duration - usr_duration) / max(ref_duration, 1e-6)
 
-    tolerance = 0.20 
+    tolerance = 0.50 if ref_duration < 0.6 else 0.20 
     if error <= tolerance:
         score = 100.0 - (error * 50.0)
     else:
         boundary_score = 100.0 - (tolerance * 50.0) 
         adjusted_error = error - tolerance
-        score = max(0.0, boundary_score * np.exp(-5.0 * adjusted_error))
+        score = max(0.0, boundary_score * np.exp(-3.0 * adjusted_error))
 
     return {
         "ref_duration": float(ref_duration),
