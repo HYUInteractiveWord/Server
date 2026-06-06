@@ -26,8 +26,6 @@ INITIAL_DAILY_MISSIONS = [
 def register(body: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
-    if db.query(User).filter(User.email == body.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
 
     user = User(
         username=body.username,
@@ -73,8 +71,6 @@ async def create_demo_user_and_login(
     """
     if db.query(User).filter(User.username == dbody.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
-    if db.query(User).filter(User.email == dbody.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
 
     user = User(
         username=dbody.username,
