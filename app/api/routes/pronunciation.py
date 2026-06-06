@@ -174,8 +174,8 @@ async def submit_pronunciation(
                 "formant": float(detailed_scores["phoneme_score"]),
                 "pitch": float(detailed_scores["pitch_score"]),
                 "timing": float(detailed_scores["duration_score"]),
-                "is_intensity_good": bool(detailed_scores["intensity_pass"])
-                "total": float(final_score),
+                "is_intensity_good": bool(detailed_scores["intensity_pass"]),
+                "total": float(final_score)
             },
 
             "raw_graph_data": raw_graph_json
