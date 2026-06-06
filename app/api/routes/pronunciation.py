@@ -12,12 +12,13 @@ from app.models.user import User
 from app.models.word_card import WordCard
 from app.models.pronunciation_record import PronunciationRecord
 from app.schemas.pronunciation import PronunciationResponse
-from app.services.gamification import calculate_xp_gain
 from app.services.evaluation import PronunciationEvaluator
 from app.services.pipeline import _get_whisper_model
 from app.core.config import settings
 from app.services.pronunciation.service import save_all_pitch_graphs
-
+from app.api.routes.words import _effect_level_from_point
+from app.services.gamification import calculate_xp_gain, update_word_level
+from app.api.routes.words import _effect_level_from_point
 router = APIRouter(prefix="/pronunciation", tags=["pronunciation"])
 
 def make_serializable(obj):
@@ -107,23 +108,22 @@ async def submit_pronunciation(
         new_level = 1
         if card:
             card.speaking_count = (card.speaking_count or 0) + 1
-            if final_score > (card.best_score or 0.0):
-                card.best_score = final_score
-                if final_score >= 93:
-                    new_level = 5
-                elif final_score >= 85:
-                    new_level = 4
-                elif final_score >= 75:
-                    new_level = 3
-                elif final_score >= 60:
-                    new_level = 2
-                else:
-                    new_level = 1
-                card.level = new_level
-            else:
-                new_level = card.level or 1
+            
+            # 1. 단어 포인트(word_point) 증가 (예: 60점 이상 시)
+            if final_score >= 60:
+                card.word_point = (card.word_point or 0) + int(final_score / 10)
+                card.effect_level = _effect_level_from_point(card.word_point)
 
-        is_new_best = card is not None and final_score >= (card.best_score or 0.0)
+            # 2. 최고 점수 갱신 확인
+            is_new_best = final_score > (card.best_score or 0.0)
+            if is_new_best:
+                card.best_score = final_score
+            
+            # 3. 단어 레벨(1~5) 갱신 (gamification.py의 함수 사용!)
+            new_level = update_word_level(card.level or 1, final_score)
+            card.level = new_level
+
+        # 4. 유저 XP 증가 (gamification.py의 함수 사용)
         xp_gained = calculate_xp_gain(final_score, is_new_best=is_new_best)
         current_user.xp += xp_gained
 
