@@ -10,7 +10,9 @@ from app.models.word_card import WordCard
 from app.services.pipeline import KoreanLearningPipeline
 from app.core.config import settings
 from app.services.dictionary import fetch_word_info
-
+import os
+import shutil
+from pathlib import Path
 router = APIRouter(prefix="/dictionary", tags=["dictionary"])
 
 nlp_pipeline = KoreanLearningPipeline(
