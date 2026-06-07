@@ -107,21 +107,3 @@ async def process_scan_result(
     matched_words=matched, 
     new_word_candidates=generated_cards
 )
-@router.delete("/cleanup")
-async def cleanup_tts_temp():
-    """static/tts/temp 폴더 내의 모든 파일을 즉시 삭제합니다."""
-    temp_dir = Path("static/tts/temp")
-    
-    if not temp_dir.exists():
-        return {"status": "success", "message": "삭제할 폴더가 이미 없습니다."}
-    
-    try:
-        for file in temp_dir.iterdir():
-            if file.is_file():
-                os.remove(file)
-            elif file.is_dir():
-                shutil.rmtree(file)
-                
-        return {"status": "success", "message": "임시 오디오 파일 정리가 완료되었습니다."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"삭제 중 오류 발생: {str(e)}")
