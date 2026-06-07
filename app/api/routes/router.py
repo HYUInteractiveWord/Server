@@ -107,7 +107,7 @@ async def process_scan_result(
     matched_words=matched, 
     new_word_candidates=generated_cards
 )
-@router.delete("/cleanup/tts-temp")
+@router.delete("/cleanup")
 async def cleanup_tts_temp():
     """static/tts/temp 폴더 내의 모든 파일을 즉시 삭제합니다."""
     temp_dir = Path("static/tts/temp")
