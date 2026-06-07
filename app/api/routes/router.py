@@ -116,7 +116,6 @@ async def cleanup_tts_temp():
         return {"status": "success", "message": "삭제할 폴더가 이미 없습니다."}
     
     try:
-        # 1. 폴더 내 파일만 지우고 싶을 때 (폴더는 유지)
         for file in temp_dir.iterdir():
             if file.is_file():
                 os.remove(file)
