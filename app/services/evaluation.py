@@ -17,6 +17,9 @@ class PronunciationEvaluator:
         - 타겟 단어가 정확히 포함됨 (1순위): 감점 없음 (1.0)
         - 타겟 단어 누락 (다른 단어로 인식됨): 인식된 발화의 평균 신뢰도만큼 감점 곱연산
         """
+        clean_target = re.sub(r'[^가-힣a-zA-Z0-9]', '', target_word)
+        if len(clean_target) <= 1:
+            return 1.0
         try:
             result = self.whisper_model.transcribe(
                 user_audio_path, language="ko", word_timestamps=True
@@ -60,7 +63,7 @@ class PronunciationEvaluator:
             penalty_factor = self._get_whisper_penalty_factor(user_audio_path, target_word)
             
             final_score = physical_score * penalty_factor
-            
+            analysis_result["scores"]["final_score"] = final_score
             return {
                 "target_word": target_word,
                 "physical_score": round(physical_score, 2),

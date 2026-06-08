@@ -85,7 +85,7 @@ async def submit_pronunciation(
         
         final_score = eval_result["final_score"]
         analysis_data = eval_result["analysis_data"]
-        
+        penalty_factor = eval_result["penalty_factor"]
         # 2. 카드/포인트 관련 로직을 먼저 수행 (PronunciationRecord 생성 전)
         card = db.query(WordCard).filter(
             WordCard.id == word_card_id,
@@ -128,7 +128,7 @@ async def submit_pronunciation(
             timing_score=float(detailed_scores.get("duration_score", 0)),
             is_intensity_good=bool(detailed_scores.get("intensity_pass", True)),
             xp_gained=int(xp_gained),
-            penalty_factor=float(eval_result["penalty_factor"]),
+            penalty_factor=float(penalty_factor),
             user_pitch_data=user_pitch,
             reference_pitch_data=ref_pitch,
             dtw_distance=dtw_dist,
@@ -170,13 +170,14 @@ async def submit_pronunciation(
             "graphs": graph_data["graph_paths"],
             "word_point": card.word_point if card else 0,
             "effect_level": card.effect_level if card else 0,
-
+            "penalty_factor": float(penalty_factor),
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
                 "formant": float(detailed_scores["phoneme_score"]),
                 "pitch": float(detailed_scores["pitch_score"]),
                 "timing": float(detailed_scores["duration_score"]),
-                "is_intensity_good": bool(detailed_scores["intensity_pass"])
+                "is_intensity_good": bool(detailed_scores["intensity_pass"]),
+                "total": float(final_score)
             },
 
             "raw_graph_data": raw_graph_json
@@ -265,7 +266,7 @@ async def evaluate_pronunciation_test(
             "target_word": target_word,
             "evaluation": eval_result,
             "graphs": graph_data["graph_paths"],
-
+            "penalty_factor": float(penalty_factor),
             "details": {
                 "pronunciation": float(detailed_scores["pronunciation_score"]),
                 "formant": float(detailed_scores["phoneme_score"]),

@@ -48,21 +48,26 @@ def pronunciation_score_mfcc_dtw(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict
             return max_score
             
         if is_child:
+            t_buffer = 2.0    # 어린이 기준 완충 구역 (이하 오차는 무감점)
             t1, t2 = 8.5, 13.5    
             k1, k2, k3 = 0.001, 0.02, 0.1    
         else:
+            t_buffer = 1.0    # 성인 기준 완충 구역 (이하 오차는 무감점)
             t1, t2 = 5.5, 9.5    
             k1, k2, k3 = 0.005, 0.03, 0.15
         
-        if error_val <= t1:
-            return max_score * np.exp(-k1 * error_val)
+        # 완충 구역 진입 시 만점 처리
+        if error_val <= t_buffer:
+            return max_score
+        elif error_val <= t1:
+            return max_score * np.exp(-k1 * (error_val - t_buffer))
         elif error_val <= t2:
-            b1 = max_score * np.exp(-k1 * t1)
+            b1 = max_score * np.exp(-k1 * (t1 - t_buffer))
             return b1 * np.exp(-k2 * (error_val - t1))
         else:
-            b1 = max_score * np.exp(-k1 * t1)
+            b1 = max_score * np.exp(-k1 * (t1 - t_buffer))
             b2 = b1 * np.exp(-k2 * (t2 - t1))
-            return b2 * np.exp(-k3 * (error_val - t2)) 
+            return b2 * np.exp(-k3 * (error_val - t2))
         
     # ---------------------------------------------------------
     # 2. [파트 1] 전체 오차 평균 (Global Score) -> 50점 만점
@@ -74,7 +79,7 @@ def pronunciation_score_mfcc_dtw(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict
     # ---------------------------------------------------------
     # 3. [파트 2] 구역별 점수 부여 (Local Chunk Scores) -> 각 10점 x 5구역 = 50점 만점
     # ---------------------------------------------------------
-    num_chunks = 5
+    num_chunks = max(1, min(5, len(local_distances)))
     chunk_size = max(1, len(local_distances) // num_chunks)
     
     chunk_errors = []
@@ -82,14 +87,15 @@ def pronunciation_score_mfcc_dtw(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict
     
     for i in range(num_chunks):
         start_idx = i * chunk_size
+        # 마지막 구간은 남은 데이터를 모두 포함하도록 처리
         end_idx = len(local_distances) if i == num_chunks - 1 else (i + 1) * chunk_size
         
         chunk_data = local_distances[start_idx:end_idx]
         
         if chunk_data:
             c_error = float(np.mean(chunk_data))
-            # 각 구역별 오차를 10점 만점 기준으로 채점
-            c_score = calculate_score(c_error, max_score=10.0)
+            max_score_per_chunk = 50.0 / num_chunks
+            c_score = calculate_score(c_error, max_score=max_score_per_chunk)
         else:
             c_error = global_error
             c_score = 0.0
@@ -141,7 +147,12 @@ def pitch_similarity_scores(f0_ref, f0_usr) -> dict:
     else:
         cv_error = abs(ref_cv - usr_cv) / ref_cv
         lenient_error = cv_error * 0.5
-        pitch_range_score = normalize_score_from_error(lenient_error)
+        
+        range_buffer = 0.05
+        if lenient_error <= range_buffer:
+            pitch_range_score = 100.0
+        else:
+            pitch_range_score = normalize_score_from_error(lenient_error - range_buffer)
 
     def fill_nan_and_znorm(x):
         x = np.asarray(x, dtype=float)
@@ -165,10 +176,14 @@ def pitch_similarity_scores(f0_ref, f0_usr) -> dict:
     D_pitch, wp_pitch = dtw(X=ref_z, Y=usr_z, metric="euclidean")
     contour_distance = D_pitch[-1, -1] / max(len(wp_pitch), 1)
     
-    pitch_contour_score = calculate_similarity_score(
-        contour_distance,
-        scale=15.0, 
-    )
+    pitch_contour_buffer = 0.15
+    if contour_distance <= pitch_contour_buffer:
+        pitch_contour_score = 100.0
+    else:
+        pitch_contour_score = calculate_similarity_score(
+            contour_distance - pitch_contour_buffer,
+            scale=15.0, 
+        )
 
     pitch_score = (0.7 * pitch_contour_score) + (0.3 * pitch_range_score)
 
@@ -183,18 +198,27 @@ def pitch_similarity_scores(f0_ref, f0_usr) -> dict:
 
 
 def duration_similarity_score(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict:
-    ref_duration = librosa.get_duration(y=y_ref, sr=sr_ref)
-    usr_duration = librosa.get_duration(y=y_usr, sr=sr_usr)
+    y_ref_trimmed, _ = librosa.effects.trim(y_ref, top_db=30)
+    y_usr_trimmed, _ = librosa.effects.trim(y_usr, top_db=30)
+    ref_duration = librosa.get_duration(y=y_ref_trimmed, sr=sr_ref)
+    usr_duration = librosa.get_duration(y=y_usr_trimmed, sr=sr_usr)
 
     error = abs(ref_duration - usr_duration) / max(ref_duration, 1e-6)
 
-    tolerance = 0.20 
-    if error <= tolerance:
-        score = 100.0 - (error * 50.0)
+    # 짧은 단어(0.6초 미만)는 오차 허용치를 50%까지 넉넉하게
+    duration_buffer = 0.05
+    if error <= duration_buffer:
+        score = 100.0
     else:
-        boundary_score = 100.0 - (tolerance * 50.0) 
-        adjusted_error = error - tolerance
-        score = max(0.0, boundary_score * np.exp(-5.0 * adjusted_error))
+        adjusted_error = error - duration_buffer
+        tolerance = 0.50 if ref_duration < 0.6 else 0.20
+        
+        if error <= tolerance:
+            score = 100.0 - (adjusted_error * 50.0)
+        else:
+            boundary_score = 100.0 - ((tolerance - duration_buffer) * 50.0) 
+            adjusted_error_beyond = error - tolerance
+            score = max(0.0, boundary_score * np.exp(-3.0 * adjusted_error_beyond))
 
     return {
         "ref_duration": float(ref_duration),
@@ -248,11 +272,15 @@ def phoneme_similarity_score(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict:
     D_f, wp_f = dtw(X=feat_ref, Y=feat_usr, metric="euclidean")
     dist_f = D_f[-1, -1] / max(len(wp_f), 1)
     
-    soft_limit = 2.0  # 완화된 감점이 적용되는 마지노선
-    if dist_f <= soft_limit:
-        formant_score = 100.0 - (dist_f * 5.0) 
+    formant_buffer = 0.3
+    soft_limit = 2.0  
+    if dist_f <= formant_buffer:
+        formant_score = 100.0
+    elif dist_f <= soft_limit:
+        formant_score = 100.0 - ((dist_f - formant_buffer) * 5.0) 
     else:
-        formant_score = max(0.0, 90.0 * np.exp(-0.05 * (dist_f - soft_limit)))
+        boundary_score = 100.0 - ((soft_limit - formant_buffer) * 5.0)
+        formant_score = max(0.0, boundary_score * np.exp(-0.05 * (dist_f - soft_limit)))
 
     def z_norm_standard(x):
         s = np.std(x)
@@ -264,7 +292,11 @@ def phoneme_similarity_score(y_ref, sr_ref: int, y_usr, sr_usr: int) -> dict:
     D_p, wp_p = dtw(X=z_norm_standard(env_ref), Y=z_norm_standard(env_usr), metric="euclidean")
     dist_p = D_p[-1, -1] / max(len(wp_p), 1)
     
-    plosive_score = max(0.0, 100.0 * np.exp(-0.3 * dist_p))
+    plosive_buffer = 0.1
+    if dist_p <= plosive_buffer:
+        plosive_score = 100.0
+    else:
+        plosive_score = max(0.0, 100.0 * np.exp(-0.3 * (dist_p - plosive_buffer)))
 
     phoneme_score = (formant_score * 0.5) + (plosive_score * 0.5)
 

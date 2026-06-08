@@ -1,31 +1,31 @@
 RANK_THRESHOLDS = [
     (0, "Bronze"),
     (500, "Silver"),
-    (1500, "Gold"),
-    (3000, "Sapphire"),
-    (6000, "Ruby"),
-    (10000, "Emerald"),
-    (15000, "Amethyst"),
-    (21000, "Pearl"),
-    (28000, "Obsidian"),
-    (36000, "Diamond"),
+    (1000, "Gold"),
+    (1500, "Sapphire"),
+    (2000, "Ruby"),
+    (2500, "Emerald"),
+    (3000, "Amethyst"),
+    (3500, "Pearl"),
+    (4000, "Obsidian"),
+    (4500, "Diamond"),
 ]
 
 RANK_WORD_SLOTS = {
     "Bronze": 20,
-    "Silver": 30,
-    "Gold": 45,
-    "Sapphire": 60,
-    "Ruby": 80,
-    "Emerald": 100,
-    "Amethyst": 130,
-    "Pearl": 160,
-    "Obsidian": 200,
-    "Diamond": 999,
+    "Silver": 40,
+    "Gold": 60,
+    "Sapphire": 80,
+    "Ruby": 100,
+    "Emerald": 110,
+    "Amethyst": 120,
+    "Pearl": 130,
+    "Obsidian": 140,
+    "Diamond": 150,
 }
 
 # 단어 레벨업 기준 점수 (1~5레벨)
-LEVEL_THRESHOLDS = [0, 60, 75, 85, 93, 98]
+LEVEL_THRESHOLDS = [0, 20, 50, 65, 85, 100]
 
 
 def get_rank_for_xp(xp: int) -> str:

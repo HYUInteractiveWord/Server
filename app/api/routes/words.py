@@ -222,7 +222,14 @@ async def create_word_card(
     ).first()
 
     if existing:
-        raise HTTPException(status_code=400, detail="Word already in your collection")
+        existing.word_point = (existing.word_point or 0) + 5
+        current_user.xp += 10 # 예: 중복 시 경험치 10 증가
+        
+        db.commit()
+        db.refresh(existing)
+        
+        # 중복이지만 성공적으로 포인트가 반영되었음을 알림
+        return existing
 
     # 프론트에서 선택한 품사/뜻이 있으면 우선 사용하고, 없으면 사전 fallback 사용
     fallback_info = fetch_word_info(word)

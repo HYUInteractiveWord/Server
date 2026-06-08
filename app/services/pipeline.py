@@ -452,13 +452,18 @@ class KoreanLearningPipeline:
             return {"translated_definition": "", "easy_examples": [], "romanization": ""}
     async def generate_tts(self, text: str, output_path: str, lang: str = "ko"):
         if not text: return
+        clean_text = text.replace("/", ", ")
+        clean_text = re.sub(r'[*_~\[\]\(\)<>]', '', clean_text) 
+        clean_text = clean_text.strip()
+        
+        if not clean_text: return
         voice_map = {
             "ko": "ko-KR-SunHiNeural",
             "ru": "ru-RU-SvetlanaNeural",
             "en": "en-US-AriaNeural"
         }
         voice = voice_map.get(lang, "ko-KR-SunHiNeural")
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = edge_tts.Communicate(clean_text, voice)
         await communicate.save(output_path)
 
     async def phase1_analyze(self, raw_stt_text: str) -> dict:

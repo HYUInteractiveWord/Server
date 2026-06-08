@@ -10,7 +10,9 @@ from app.models.word_card import WordCard
 from app.services.pipeline import KoreanLearningPipeline
 from app.core.config import settings
 from app.services.dictionary import fetch_word_info
-
+import os
+import shutil
+from pathlib import Path
 router = APIRouter(prefix="/dictionary", tags=["dictionary"])
 
 nlp_pipeline = KoreanLearningPipeline(
@@ -225,3 +227,22 @@ async def process_dictionary_words(
         "already_exists": already_exists, 
         "new_word_cards": generated_cards
     }
+
+@router.delete("/cleanup")
+async def cleanup_tts_temp():
+    """static/tts/temp 폴더 내의 모든 파일을 즉시 삭제합니다."""
+    temp_dir = Path("static/tts/temp")
+    
+    if not temp_dir.exists():
+        return {"status": "success", "message": "삭제할 폴더가 이미 없습니다."}
+    
+    try:
+        for file in temp_dir.iterdir():
+            if file.is_file():
+                os.remove(file)
+            elif file.is_dir():
+                shutil.rmtree(file)
+                
+        return {"status": "success", "message": "임시 오디오 파일 정리가 완료되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"삭제 중 오류 발생: {str(e)}")
