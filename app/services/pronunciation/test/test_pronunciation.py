@@ -18,8 +18,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------
 # 테스트 파일명 설정
 # ---------------------------
-TTS_FILE = "사과.wav"
-USER_FILE = "사과1.wav"
+TTS_FILE = "물.wav"
+USER_FILE = "안녕하세요.wav"
 
 tts_path = str(TTS_DIR / TTS_FILE)
 user_path = str(USER_DIR / USER_FILE)
