@@ -223,7 +223,7 @@ class KoreanLearningPipeline:
         except Exception as e:
             print(f"  [Error] Vocab extraction failed: {e}", flush=True)
             return [], f"Error: {str(e)}"
-async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
+    async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
         """기초사전 API에서 다의어 포함 뜻풀이 수집"""
         url = "https://krdict.korean.go.kr/api/search"
         params = {
