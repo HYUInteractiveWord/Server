@@ -154,42 +154,6 @@ class KoreanLearningPipeline:
             print(f"  [Error] Vocab extraction failed: {e}", flush=True)
             return [], f"Error: {str(e)}"
 
-    async def fetch_basic_dict_data(self, word: str) -> dict:
-        """기초사전 API에서 다의어 포함 뜻풀이 수집"""
-        url = "https://krdict.korean.go.kr/api/search"
-        params = {"key": self.dict_api_key, "q": word, "part": "word", "sort": "dict", "translated": "n", "advanced": "y", "method": "exact"}
-        print(f"  [Dict API] '{word}' 기초사전 검색 중...", flush=True)
-        
-        def _sync_request():
-            response = requests.get(url, params=params)
-            response.raise_for_status()
-            return response.text
-
-        try:
-            response_text = await asyncio.to_thread(_sync_request)
-            
-            root = ET.fromstring(response_text)
-            total = int(root.findtext('total', '0'))
-            
-            if total > 0:
-                items = root.findall('.//item')[:5]
-                senses = []
-                for item in items:
-                    pos = item.findtext('pos', '품사 없음')
-                    sense = item.find('sense')
-                    if sense is not None:
-                        definition = sense.findtext('definition', '정의 없음')
-                        clean_def = self._clean_text(definition)
-                        if not any(s['definition'] == clean_def for s in senses):
-                            senses.append({"pos": pos, "definition": clean_def})
-                print(f"  [Dict API] '{word}' 뜻 {len(senses)}개 발견 완료!", flush=True)
-                return {"status": "success", "word": word, "senses": senses}
-            
-            print(f"  [Dict API] '{word}' 사전에 등록되지 않은 단어입니다.", flush=True)
-            return {"status": "fail", "word": word}
-        except Exception as e:
-            print(f"  [Error] fetch_basic_dict_data failed for '{word}': {e}", flush=True)
-            return {"status": "error", "word": word}
 
     async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict:
         """다의어 문맥 분석 및 선택 (비동기 처리)"""
@@ -210,12 +174,13 @@ class KoreanLearningPipeline:
             print(f"  [Error] select_best_definition failed: {e}", flush=True)
             return senses[0]
 
-    async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
+async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
         """3. 기초사전 검증 ('품사 없음' 제외 및 다의어 필터링)"""
         valid_candidates = {}
         unique_words = list(set(extracted_words))
         
         for word in unique_words:
+            # 💡 에러의 원인 해결: expected_meaning 파라미터를 정상적으로 전달 및 수신
             dict_info = await self.fetch_basic_dict_data(word, expected_meaning=expected_meaning)
             
             if dict_info.get("status") == "success":
@@ -224,6 +189,7 @@ class KoreanLearningPipeline:
                     continue
                 
                 if len(valid_senses) > 1:
+                    # 다의어일 경우 LLM이 문맥(context_text)을 보고 올바른 뜻을 선택
                     best_sense = await self.select_best_definition(word, valid_senses, context_text)
                 else:
                     best_sense = valid_senses[0]
@@ -233,6 +199,62 @@ class KoreanLearningPipeline:
             await asyncio.sleep(0.2)
             
         return valid_candidates
+
+    async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
+        """기초사전 API에서 다의어 포함 뜻풀이 수집"""
+        url = "https://krdict.korean.go.kr/api/search"
+        params = {
+            "key": self.dict_api_key, 
+            "q": word, 
+            "part": "word", 
+            "sort": "dict", 
+            "translated": "y", 
+            "trans_lang": "1", 
+            "advanced": "y", 
+            "method": "exact"
+        }
+        print(f"  [Dict API] '{word}' 기초사전 검색 중...", flush=True)
+        
+        def _sync_request():
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            return response.text
+
+        try:
+            response_text = await asyncio.to_thread(_sync_request)
+            
+            root = ET.fromstring(response_text)
+            total = int(root.findtext('total', '0'))
+            
+            if total > 0:
+                items = root.findall('.//item')[:5]
+                senses = []
+                for item in items:
+                    pos = item.findtext('pos', '품사 없음')
+                    sense = item.find('sense')
+                    
+                    if sense is not None:
+                        definition = sense.findtext('definition', '정의 없음')
+                        clean_def = self._clean_text(definition)
+                        
+                        # 💡 [핵심] 영어 번역어가 있다면 뜻풀이 뒤에 괄호로 붙여줌
+                        # 이렇게 하면 LLM이 "동물 말"과 "언어 말"을 구분하기가 100배 쉬워집니다.
+                        trans_words = [t.text for t in sense.findall(".//trans_word") if t.text]
+                        trans_str = f" (영어 뜻: {', '.join(trans_words)})" if trans_words else ""
+                        combined_def = clean_def + trans_str
+                        
+                        if not any(s['definition'] == combined_def for s in senses):
+                            senses.append({"pos": pos, "definition": combined_def})
+                            
+                print(f"  [Dict API] '{word}' 뜻 {len(senses)}개 발견 완료!", flush=True)
+                return {"status": "success", "word": word, "senses": senses}
+            
+            print(f"  [Dict API] '{word}' 사전에 등록되지 않은 단어입니다.", flush=True)
+            return {"status": "fail", "word": word}
+            
+        except Exception as e:
+            print(f"  [Error] fetch_basic_dict_data failed for '{word}': {e}", flush=True)
+            return {"status": "error", "word": word}
 
     async def fetch_on_term_category(self, original_word: str, target_definition: str = "") -> str:
         """온용어 세부 분류 태그 검색 (의미 기반 스마트 매칭)"""
