@@ -165,6 +165,8 @@ async def submit_pronunciation(
             "score": float(final_score),
             "is_new_best": is_new_best,
             "xp_gained": int(xp_gained),
+            "word_card_level": new_level,
+            "penalty_factor": float(eval_result["penalty_factor"]),
             "graphs": graph_data["graph_paths"],
             "word_point": card.word_point if card else 0,
             "effect_level": card.effect_level if card else 0,

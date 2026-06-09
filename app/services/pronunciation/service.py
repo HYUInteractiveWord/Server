@@ -91,14 +91,20 @@ def analyze_pronunciation(tts_path: str, user_path: str, sr: int = 16000) -> dic
         y_usr_pitch, sr_usr
     )
 
-    # 강세(intensity)는 P/F로만 판단하므로 최종 점수(final_score) 계산에서 제외
-    # 나머지 4가지 핵심 지표만 전달하여 25%씩 합산
-    final_score = calculate_final_score(
-        pronunciation_score=pron_result["score"],
-        pitch_score=pitch_result["pitch_score"],
-        duration_score=duration_result["duration_score"],
-        phoneme_score=phoneme_result["phoneme_score"],
-    )
+    if not intensity_result["is_pass"]:
+        pron_result["score"] = 0.0
+        pitch_result["pitch_score"] = 0.0
+        duration_result["duration_score"] = 0.0
+        phoneme_result["phoneme_score"] = 0.0
+        final_score = 0.0
+    else:
+        # Pass일 경우에만 정상적으로 최종 점수 계산
+        final_score = calculate_final_score(
+            pronunciation_score=pron_result["score"],
+            pitch_score=pitch_result["pitch_score"],
+            duration_score=duration_result["duration_score"],
+            phoneme_score=phoneme_result["phoneme_score"],
+        )
 
     return {
         "input": {
