@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File, 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
-
+import re
 from app.db import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -52,6 +52,11 @@ class PreviewRequest(BaseModel):
 # ==========================================
 # Routes
 # ==========================================
+import re
+from fastapi import APIRouter, Query, Depends, HTTPException
+from typing import Optional
+# 필요한 의존성 및 모델 임포트 (기존 코드 유지)
+
 @router.get("/search")
 async def search_dictionary(
     word: str = Query(..., min_length=1, description="검색할 단어"),
@@ -61,8 +66,8 @@ async def search_dictionary(
     """
     통합 사전 검색 API.
 
-    - 프론트 단어 검색용: word, pos, definition 반환
-    - 기존 파이프라인용: search_query, candidates 유지
+    - 한국어 입력: 기초사전 즉시 검색
+    - 외국어 입력: LLM이 한국어로 번역 후 해당 단어의 '목표 의미'를 매칭하여 반환
     """
     word = word.strip()
     if not word:
@@ -71,12 +76,18 @@ async def search_dictionary(
     target_language = _normalize_target_language(current_user.preferred_language)
     effective_source_lang = source_lang or _source_lang_for_target(target_language)
 
-    # 1. 한국어 단어 정보 조회
-    word_info = fetch_word_info(word)
+    # 1. 입력된 단어가 한국어인지 검사
+    is_korean = bool(re.search(r'[가-힣]', word))
 
-    # 2. 기존 후보 검색 기능도 유지
-    candidates = []
+    word_info = {}
+    if is_korean:
+        # 한국어일 경우에만 다이렉트로 사전 검색 진행
+        word_info = fetch_word_info(word)
+
+    # 2. 다국어 -> 한국어 매칭 및 후보군 추출 LLM 파이프라인
+    candidates = {}
     try:
+        # pipeline 내부에서 이미 fetch_word_info(..., expected_meaning=word)를 통해 완벽한 뜻을 찾아서 Dict로 반환
         candidates = await nlp_pipeline.search_dictionary_candidates(
             query=word,
             source_lang=effective_source_lang,
@@ -84,40 +95,26 @@ async def search_dictionary(
     except Exception as e:
         print(f"[Dict Search] candidate search failed: {e}")
 
-
     candidate_map = {}
 
-    for candidate in candidates or []:
-        if isinstance(candidate, dict):
-            candidate_word = (
-                candidate.get("word")
-                or candidate.get("korean_word")
-                or candidate.get("korean")
-                or candidate.get("lemma")
-                or ""
-            )
-            candidate_word = str(candidate_word).strip()
-
-            item = {
-                "pos": candidate.get("pos") or candidate.get("pos_type"),
-                "definition": candidate.get("definition") or "",
-            }
-        else:
-            candidate_word = str(candidate).strip()
-            fetched = fetch_word_info(candidate_word) if candidate_word else {}
-            item = {
-                "pos": fetched.get("pos"),
-                "definition": fetched.get("definition") or "",
-            }
-
+    # 3. 파이프라인이 반환한 Dict를 순회
+    for candidate_word, info in (candidates or {}).items():
+        candidate_word = str(candidate_word).strip()
         if not candidate_word:
             continue
 
+        # 파이프라인이 문맥까지 고려해서 찾아온 정확한 뜻풀이를 그대로 사용
+        item = {
+            "pos": info.get("pos"),
+            "definition": info.get("definition") or "",
+        }
+
+        # 프리뷰 오디오/번역 생성 로직
         if target_language != "ko" and item.get("definition"):
             try:
                 preview = await nlp_pipeline.generate_word_preview(
                     word=candidate_word,
-                    definition=item.get("definition") or "",
+                    definition=item.get("definition"),
                     pos=item.get("pos") or "",
                     output_dir="static/tts/temp",
                     target_language=target_language,
@@ -130,17 +127,26 @@ async def search_dictionary(
 
         candidate_map[candidate_word] = item
 
-    candidates = candidate_map
+    # 4. 프론트엔드 반환 데이터 조립
+    if not is_korean and candidate_map:
+        first_cand_word = list(candidate_map.keys())[0]
+        first_cand_info = candidate_map[first_cand_word]
+        
+        return {
+            "word": first_cand_word,             # 프론트에 메인으로 뜰 단어
+            "pos": first_cand_info.get("pos"),
+            "definition": first_cand_info.get("definition"),
+            "search_query": word,                # 사용자가 쳤던 단어 
+            "candidates": candidate_map,   
+        }
 
+    # 한국어를 검색했거나 후보군이 없는 경우 기존 포맷으로 리턴
     return {
-        # 프론트용 필드
         "word": word,
         "pos": word_info.get("pos"),
         "definition": word_info.get("definition"),
-
-        # 기존 기능 유지용 필드
         "search_query": word,
-        "candidates": candidates,
+        "candidates": candidate_map,
     }
 
 
