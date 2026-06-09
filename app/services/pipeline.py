@@ -273,28 +273,47 @@ class KoreanLearningPipeline:
             return {"status": "error", "word": word}
 
 
-    async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict:
-        """다의어 중 원본 외국어 뜻(문맥)에 가장 부합하는 뜻 선택"""
-        # LLM이 외국어 원문과 한국어 뜻풀이를 직접 매칭
+    async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict | None:
+        """다의어 중 원본 외국어 뜻(문맥)에 가장 부합하는 뜻 선택 (일치하는게 없으면 None 반환)"""
+        
+        # 💡 [핵심] LLM이 뜻풀이를 안 읽고 대충 true를 던지는 것을 막기 위해 'reasoning(추론)' 과정을 강제합니다.
         prompt = PromptTemplate.from_template(
             "당신은 이중언어 번역 및 문맥 분석기입니다. 사용자가 찾고자 하는 단어의 핵심 의미는 다음과 같습니다.\n"
             "[목표 의미 및 문맥]: {context_text}\n\n"
             "아래는 한국어 단어 '{word}'의 사전적 뜻풀이 후보들입니다.\n"
             "[후보]\n{candidates}\n\n"
-            "위 후보 중 [목표 의미]와 가장 정확하게 일치하는 뜻의 번호(index)를 찾으세요.\n"
-            "반드시 아래의 JSON 형식으로만 응답하세요.\n"
-            "{{\n  \"best_index\": 0\n}}"
+            "평가 지침:\n"
+            "1. 위 후보들의 '뜻풀이(definition)'를 주의 깊게 읽고, [목표 의미]와 정확하게 일치하는지 비교하여 'reasoning'에 먼저 그 이유를 작성하세요.\n"
+            "2. 단어의 발음이나 한자가 같더라도, 제시된 뜻풀이가 [목표 의미]와 다르면 절대 고르면 안 됩니다.\n"
+            "3. 일치하는 뜻풀이가 있다면 'is_match'를 true로 하고, 해당 번호(index)를 'best_index'에 적으세요.\n"
+            "4. 일치하는 뜻풀이가 단 하나도 없다면 'is_match'를 반드시 false로 하고, 'best_index'는 -1로 적으세요.\n\n"
+            "반드시 아래의 JSON 형식으로 응답하세요:\n"
+            "{{\n  \"reasoning\": \"뜻풀이 0번은 장애물을 뜻하므로 horse와 다릅니다.\",\n  \"is_match\": false,\n  \"best_index\": -1\n}}"
         )
         candidates_str = "".join([f"{i}. [{s['pos']}] {s['definition']}\n" for i, s in enumerate(senses)])
         chain = prompt | self.llm | self.json_parser
         
         try:
             result = await chain.ainvoke({"word": word, "context_text": context_text, "candidates": candidates_str})
-            best_idx = result.get("best_index", 0)
-            return senses[best_idx] if 0 <= best_idx < len(senses) else senses[0]
+            
+            # 💡 서버 로그에서 LLM이 무슨 생각을 했는지 직접 확인할 수 있습니다.
+            print(f"  [Dict Filter] '{word}' 판단 이유: {result.get('reasoning', '')}", flush=True)
+            
+            is_match = result.get("is_match", False)
+            if not is_match:
+                print(f"  [Dict Filter] '{word}' 최종 탈락 (is_match=False)", flush=True)
+                return None
+                
+            best_idx = result.get("best_index", -1) 
+            
+            if 0 <= best_idx < len(senses):
+                return senses[best_idx]
+            else:
+                return None
+                
         except Exception as e:
             print(f"  [Error] select_best_definition failed: {e}", flush=True)
-            return senses[0]
+            return None
 
     async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
         """3. 기초사전 검증 (어미, 조사 등 학습에 부적합한 품사 원천 차단)"""
