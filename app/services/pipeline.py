@@ -290,38 +290,34 @@ class KoreanLearningPipeline:
         
         try:
             result = await chain.ainvoke({"word": word, "context_text": context_text, "candidates": candidates_str})
-            is_match = result.get("is_match", False)
-            if not is_match:
-                print(f"  [Dict Filter] '{word}' 탈락 처리됨 (LLM 판단: is_match=False)", flush=True)
-                return None
-                
-            best_idx = result.get("best_index", 0) 
-            
-            # is_match가 True이면서 유효한 인덱스
-            if 0 <= best_idx < len(senses):
-                return senses[best_idx]
-            else:
-                return senses[0] # 인덱스가 튀었을 경우를 대비
-                
+            best_idx = result.get("best_index", 0)
+            return senses[best_idx] if 0 <= best_idx < len(senses) else senses[0]
         except Exception as e:
             print(f"  [Error] select_best_definition failed: {e}", flush=True)
-            return None
+            return senses[0]
 
     async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
-        """3. 기초사전 검증 ('품사 없음' 제외, 뜻 불일치 시 탈락)"""
+        """3. 기초사전 검증 (어미, 조사 등 학습에 부적합한 품사 원천 차단)"""
         valid_candidates = {}
         unique_words = list(set(extracted_words))
+        
+        excluded_pos = ["품사 없음", "어미", "조사", "접사", "접두사", "접미사"]
         
         for word in unique_words:
             dict_info = await self.fetch_basic_dict_data(word, expected_meaning=expected_meaning)
             
             if dict_info.get("status") == "success":
-                valid_senses = [s for s in dict_info.get("senses", []) if s["pos"] and s["pos"] != "품사 없음"]
+                valid_senses = [
+                    s for s in dict_info.get("senses", []) 
+                    if s["pos"] and s["pos"] not in excluded_pos
+                ]
+                
                 if not valid_senses:
+                    print(f"  [Dict Filter] 탈락: '{word}' (학습에 부적합한 품사만 존재함)", flush=True)
                     continue
                 
                 best_sense = await self.select_best_definition(word, valid_senses, context_text)
-
+                
                 if best_sense is not None:
                     valid_candidates[word] = best_sense
                 else:
