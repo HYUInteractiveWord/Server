@@ -196,15 +196,15 @@ class KoreanLearningPipeline:
             return {"status": "error", "word": word}
 
 
-    async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict:
-        """다의어 중 원본 외국어 뜻(문맥)에 가장 부합하는 뜻 선택"""
-        # LLM이 외국어 원문과 한국어 뜻풀이를 직접 매칭
+    async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict | None:
+        """다의어 중 원본 외국어 뜻(문맥)에 가장 부합하는 뜻 선택 (일치하는게 없으면 None 반환)"""
         prompt = PromptTemplate.from_template(
             "당신은 이중언어 번역 및 문맥 분석기입니다. 사용자가 찾고자 하는 단어의 핵심 의미는 다음과 같습니다.\n"
             "[목표 의미 및 문맥]: {context_text}\n\n"
             "아래는 한국어 단어 '{word}'의 사전적 뜻풀이 후보들입니다.\n"
             "[후보]\n{candidates}\n\n"
             "위 후보 중 [목표 의미]와 가장 정확하게 일치하는 뜻의 번호(index)를 찾으세요.\n"
+            "중요: 만약 후보 중에 [목표 의미]와 일치하거나 유사한 뜻이 **단 하나도 없다면**, 억지로 고르지 말고 반드시 -1을 반환하세요.\n"
             "반드시 아래의 JSON 형식으로만 응답하세요.\n"
             "{{\n  \"best_index\": 0\n}}"
         )
@@ -213,23 +213,17 @@ class KoreanLearningPipeline:
         
         try:
             result = await chain.ainvoke({"word": word, "context_text": context_text, "candidates": candidates_str})
-            best_idx = result.get("best_index", 0)
-            return senses[best_idx] if 0 <= best_idx < len(senses) else senses[0]
+            # 기본값을 0에서 -1로 변경
+            best_idx = result.get("best_index", -1) 
+            
+            # 일치하는 뜻이 없어 -1을 반환했거나, 유효하지 않은 인덱스면 None 반환
+            if best_idx == -1 or not (0 <= best_idx < len(senses)):
+                return None
+                
+            return senses[best_idx]
         except Exception as e:
             print(f"  [Error] select_best_definition failed: {e}", flush=True)
-            return senses[0]
-            
-            cleaned_output = re.sub(r'```json\n?|```', '', llm_raw_output).strip()
-            
-            try:
-                extracted_words = json.loads(cleaned_output)
-            except Exception:
-                extracted_words = re.findall(r'[가-힣]+', cleaned_output)
-                
-            return extracted_words, llm_raw_output
-        except Exception as e:
-            print(f"  [Error] Vocab extraction failed: {e}", flush=True)
-            return [], f"Error: {str(e)}"
+            return None
     async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
         """기초사전 API에서 다의어 포함 뜻풀이 수집"""
         url = "https://krdict.korean.go.kr/api/search"
@@ -302,13 +296,12 @@ class KoreanLearningPipeline:
             print(f"  [Error] select_best_definition failed: {e}", flush=True)
             return senses[0]
 
-    async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
-        """3. 기초사전 검증 ('품사 없음' 제외 및 다의어 필터링)"""
+async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
+        """3. 기초사전 검증 ('품사 없음' 제외, 뜻 불일치 시 탈락)"""
         valid_candidates = {}
         unique_words = list(set(extracted_words))
         
         for word in unique_words:
-            # 💡 에러의 원인 해결: expected_meaning 파라미터를 정상적으로 전달 및 수신
             dict_info = await self.fetch_basic_dict_data(word, expected_meaning=expected_meaning)
             
             if dict_info.get("status") == "success":
@@ -316,14 +309,13 @@ class KoreanLearningPipeline:
                 if not valid_senses:
                     continue
                 
-                if len(valid_senses) > 1:
-                    # 다의어일 경우 LLM이 문맥(context_text)을 보고 올바른 뜻을 선택
-                    best_sense = await self.select_best_definition(word, valid_senses, context_text)
+                best_sense = await self.select_best_definition(word, valid_senses, context_text)
+
+                if best_sense is not None:
+                    valid_candidates[word] = best_sense
                 else:
-                    best_sense = valid_senses[0]
+                    print(f"  [Dict Filter] 탈락: '{word}' (사전에 목표 의미와 일치하는 뜻이 없습니다)", flush=True)
                     
-                valid_candidates[word] = best_sense
-                
             await asyncio.sleep(0.2)
             
         return valid_candidates
