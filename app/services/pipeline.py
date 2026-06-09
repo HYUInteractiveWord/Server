@@ -140,17 +140,24 @@ class KoreanLearningPipeline:
         chain = prompt | self.llm 
         try:
             response = await chain.ainvoke({"text": text})
-            llm_raw_output = response.content.strip() async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
+            llm_raw_output = response.content.strip() 
+        except Exception as e:
+            print(f"  [Error] Vocab extraction failed: {e}", flush=True)
+            llm_raw_output = "[]"
+
+        return llm_raw_output
+
+    async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
         """기초사전 API에서 다의어 포함 뜻풀이 수집"""
         url = "https://krdict.korean.go.kr/api/search"
         params = {
             "key": self.dict_api_key, 
             "q": word, 
             "part": "word", 
-            "sort": "popular",  # 💡 핵심 1: 'dict' 대신 'popular'를 써서 대중적인 뜻(동물 말 등)이 먼저 오게 합니다.
+            "sort": "popular",  
             "advanced": "y", 
             "method": "exact",
-            "num": 10           # 💡 핵심 2: 다의어가 잘리지 않게 후보군을 10개로 늘립니다.
+            "num": 10           
         }
         print(f"  [Dict API] '{word}' 기초사전 검색 중...", flush=True)
         
@@ -191,7 +198,7 @@ class KoreanLearningPipeline:
 
     async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict:
         """다의어 중 원본 외국어 뜻(문맥)에 가장 부합하는 뜻 선택"""
-        # 💡 핵심 3: 프롬프트를 명확하게 다듬어 LLM이 외국어 원문과 한국어 뜻풀이를 직접 매칭하게 만듭니다.
+        # LLM이 외국어 원문과 한국어 뜻풀이를 직접 매칭
         prompt = PromptTemplate.from_template(
             "당신은 이중언어 번역 및 문맥 분석기입니다. 사용자가 찾고자 하는 단어의 핵심 의미는 다음과 같습니다.\n"
             "[목표 의미 및 문맥]: {context_text}\n\n"
