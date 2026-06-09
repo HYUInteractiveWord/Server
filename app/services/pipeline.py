@@ -210,13 +210,13 @@ class KoreanLearningPipeline:
             print(f"  [Error] select_best_definition failed: {e}", flush=True)
             return senses[0]
 
-    async def filter_with_dict(self, extracted_words: list, context_text: str) -> dict:
+    async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
         """3. 기초사전 검증 ('품사 없음' 제외 및 다의어 필터링)"""
         valid_candidates = {}
         unique_words = list(set(extracted_words))
         
         for word in unique_words:
-            dict_info = await self.fetch_basic_dict_data(word)
+            dict_info = await self.fetch_basic_dict_data(word, expected_meaning=expected_meaning)
             
             if dict_info.get("status") == "success":
                 valid_senses = [s for s in dict_info.get("senses", []) if s["pos"] and s["pos"] != "품사 없음"]
@@ -513,7 +513,9 @@ class KoreanLearningPipeline:
                 extracted_words = re.findall(r'[가-힣]+', cleaned_output)
                 
             context_text = f"이 단어는 {source_lang} '{query}'의 의미를 가집니다."
-            valid_candidates = await self.filter_with_dict(extracted_words, context_text)
+            
+
+            valid_candidates = await self.filter_with_dict(extracted_words, context_text, expected_meaning=query)
             
             print(f"  사전검색 완료. 후보군: {list(valid_candidates.keys())}", flush=True)
             return valid_candidates
