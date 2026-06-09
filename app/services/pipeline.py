@@ -296,7 +296,7 @@ class KoreanLearningPipeline:
             print(f"  [Error] select_best_definition failed: {e}", flush=True)
             return senses[0]
 
-async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
+    async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
         """3. 기초사전 검증 ('품사 없음' 제외, 뜻 불일치 시 탈락)"""
         valid_candidates = {}
         unique_words = list(set(extracted_words))
