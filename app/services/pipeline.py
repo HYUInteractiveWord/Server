@@ -153,53 +153,6 @@ class KoreanLearningPipeline:
         except Exception as e:
             print(f"  [Error] Vocab extraction failed: {e}", flush=True)
             return [], f"Error: {str(e)}"
-
-
-    async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict:
-        """다의어 문맥 분석 및 선택 (비동기 처리)"""
-        prompt = PromptTemplate.from_template(
-            "당신은 한국어 문맥 분석기입니다. 아래 문장에서 '{word}'라는 단어의 의미를 분석하세요.\n"
-            "[문맥]: {context_text}\n"
-            "[후보]\n{candidates}\n"
-            "위 후보 중 알맞은 정의의 번호(index)를 찾으세요. JSON 형식으로 응답하세요.\n"
-            "{{\n  \"reasoning\": \"이유\",\n  \"best_index\": 0\n}}"
-        )
-        candidates_str = "".join([f"{i}. [{s['pos']}] {s['definition']}\n" for i, s in enumerate(senses)])
-        chain = prompt | self.llm | self.json_parser
-        try:
-            result = await chain.ainvoke({"word": word, "context_text": context_text, "candidates": candidates_str})
-            best_idx = result.get("best_index", 0)
-            return senses[best_idx] if 0 <= best_idx < len(senses) else senses[0]
-        except Exception as e:
-            print(f"  [Error] select_best_definition failed: {e}", flush=True)
-            return senses[0]
-
-async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
-        """3. 기초사전 검증 ('품사 없음' 제외 및 다의어 필터링)"""
-        valid_candidates = {}
-        unique_words = list(set(extracted_words))
-        
-        for word in unique_words:
-            # 💡 에러의 원인 해결: expected_meaning 파라미터를 정상적으로 전달 및 수신
-            dict_info = await self.fetch_basic_dict_data(word, expected_meaning=expected_meaning)
-            
-            if dict_info.get("status") == "success":
-                valid_senses = [s for s in dict_info.get("senses", []) if s["pos"] and s["pos"] != "품사 없음"]
-                if not valid_senses:
-                    continue
-                
-                if len(valid_senses) > 1:
-                    # 다의어일 경우 LLM이 문맥(context_text)을 보고 올바른 뜻을 선택
-                    best_sense = await self.select_best_definition(word, valid_senses, context_text)
-                else:
-                    best_sense = valid_senses[0]
-                    
-                valid_candidates[word] = best_sense
-                
-            await asyncio.sleep(0.2)
-            
-        return valid_candidates
-
     async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
         """기초사전 API에서 다의어 포함 뜻풀이 수집"""
         url = "https://krdict.korean.go.kr/api/search"
@@ -255,6 +208,52 @@ async def filter_with_dict(self, extracted_words: list, context_text: str, expec
         except Exception as e:
             print(f"  [Error] fetch_basic_dict_data failed for '{word}': {e}", flush=True)
             return {"status": "error", "word": word}
+
+    async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict:
+        """다의어 문맥 분석 및 선택 (비동기 처리)"""
+        prompt = PromptTemplate.from_template(
+            "당신은 한국어 문맥 분석기입니다. 아래 문장에서 '{word}'라는 단어의 의미를 분석하세요.\n"
+            "[문맥]: {context_text}\n"
+            "[후보]\n{candidates}\n"
+            "위 후보 중 알맞은 정의의 번호(index)를 찾으세요. JSON 형식으로 응답하세요.\n"
+            "{{\n  \"reasoning\": \"이유\",\n  \"best_index\": 0\n}}"
+        )
+        candidates_str = "".join([f"{i}. [{s['pos']}] {s['definition']}\n" for i, s in enumerate(senses)])
+        chain = prompt | self.llm | self.json_parser
+        try:
+            result = await chain.ainvoke({"word": word, "context_text": context_text, "candidates": candidates_str})
+            best_idx = result.get("best_index", 0)
+            return senses[best_idx] if 0 <= best_idx < len(senses) else senses[0]
+        except Exception as e:
+            print(f"  [Error] select_best_definition failed: {e}", flush=True)
+            return senses[0]
+
+    async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
+        """3. 기초사전 검증 ('품사 없음' 제외 및 다의어 필터링)"""
+        valid_candidates = {}
+        unique_words = list(set(extracted_words))
+        
+        for word in unique_words:
+            # 💡 에러의 원인 해결: expected_meaning 파라미터를 정상적으로 전달 및 수신
+            dict_info = await self.fetch_basic_dict_data(word, expected_meaning=expected_meaning)
+            
+            if dict_info.get("status") == "success":
+                valid_senses = [s for s in dict_info.get("senses", []) if s["pos"] and s["pos"] != "품사 없음"]
+                if not valid_senses:
+                    continue
+                
+                if len(valid_senses) > 1:
+                    # 다의어일 경우 LLM이 문맥(context_text)을 보고 올바른 뜻을 선택
+                    best_sense = await self.select_best_definition(word, valid_senses, context_text)
+                else:
+                    best_sense = valid_senses[0]
+                    
+                valid_candidates[word] = best_sense
+                
+            await asyncio.sleep(0.2)
+            
+        return valid_candidates
+
 
     async def fetch_on_term_category(self, original_word: str, target_definition: str = "") -> str:
         """온용어 세부 분류 태그 검색 (의미 기반 스마트 매칭)"""
