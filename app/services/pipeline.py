@@ -290,11 +290,22 @@ class KoreanLearningPipeline:
         
         try:
             result = await chain.ainvoke({"word": word, "context_text": context_text, "candidates": candidates_str})
-            best_idx = result.get("best_index", 0)
-            return senses[best_idx] if 0 <= best_idx < len(senses) else senses[0]
+            is_match = result.get("is_match", False)
+            if not is_match:
+                print(f"  [Dict Filter] '{word}' 탈락 처리됨 (LLM 판단: is_match=False)", flush=True)
+                return None
+                
+            best_idx = result.get("best_index", 0) 
+            
+            # is_match가 True이면서 유효한 인덱스
+            if 0 <= best_idx < len(senses):
+                return senses[best_idx]
+            else:
+                return senses[0] # 인덱스가 튀었을 경우를 대비
+                
         except Exception as e:
             print(f"  [Error] select_best_definition failed: {e}", flush=True)
-            return senses[0]
+            return None
 
     async def filter_with_dict(self, extracted_words: list, context_text: str, expected_meaning: str = None) -> dict:
         """3. 기초사전 검증 ('품사 없음' 제외, 뜻 불일치 시 탈락)"""
