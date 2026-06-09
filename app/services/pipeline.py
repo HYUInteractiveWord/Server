@@ -140,31 +140,17 @@ class KoreanLearningPipeline:
         chain = prompt | self.llm 
         try:
             response = await chain.ainvoke({"text": text})
-            llm_raw_output = response.content.strip() 
-            
-            cleaned_output = re.sub(r'```json\n?|```', '', llm_raw_output).strip()
-            
-            try:
-                extracted_words = json.loads(cleaned_output)
-            except Exception:
-                extracted_words = re.findall(r'[가-힣]+', cleaned_output)
-                
-            return extracted_words, llm_raw_output
-        except Exception as e:
-            print(f"  [Error] Vocab extraction failed: {e}", flush=True)
-            return [], f"Error: {str(e)}"
-    async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
+            llm_raw_output = response.content.strip() async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
         """기초사전 API에서 다의어 포함 뜻풀이 수집"""
         url = "https://krdict.korean.go.kr/api/search"
         params = {
             "key": self.dict_api_key, 
             "q": word, 
             "part": "word", 
-            "sort": "dict", 
-            "translated": "y", 
-            "trans_lang": "1", 
+            "sort": "popular",  # 💡 핵심 1: 'dict' 대신 'popular'를 써서 대중적인 뜻(동물 말 등)이 먼저 오게 합니다.
             "advanced": "y", 
-            "method": "exact"
+            "method": "exact",
+            "num": 10           # 💡 핵심 2: 다의어가 잘리지 않게 후보군을 10개로 늘립니다.
         }
         print(f"  [Dict API] '{word}' 기초사전 검색 중...", flush=True)
         
@@ -180,24 +166,17 @@ class KoreanLearningPipeline:
             total = int(root.findtext('total', '0'))
             
             if total > 0:
-                items = root.findall('.//item')[:5]
+                items = root.findall('.//item')[:10]
                 senses = []
                 for item in items:
                     pos = item.findtext('pos', '품사 없음')
-                    sense = item.find('sense')
-                    
-                    if sense is not None:
+                    # 한 item 내에 sense가 여러 개 있을 수 있으므로 모두 탐색
+                    for sense in item.findall('sense'):
                         definition = sense.findtext('definition', '정의 없음')
                         clean_def = self._clean_text(definition)
                         
-                        # 💡 [핵심] 영어 번역어가 있다면 뜻풀이 뒤에 괄호로 붙여줌
-                        # 이렇게 하면 LLM이 "동물 말"과 "언어 말"을 구분하기가 100배 쉬워집니다.
-                        trans_words = [t.text for t in sense.findall(".//trans_word") if t.text]
-                        trans_str = f" (영어 뜻: {', '.join(trans_words)})" if trans_words else ""
-                        combined_def = clean_def + trans_str
-                        
-                        if not any(s['definition'] == combined_def for s in senses):
-                            senses.append({"pos": pos, "definition": combined_def})
+                        if not any(s['definition'] == clean_def for s in senses):
+                            senses.append({"pos": pos, "definition": clean_def})
                             
                 print(f"  [Dict API] '{word}' 뜻 {len(senses)}개 발견 완료!", flush=True)
                 return {"status": "success", "word": word, "senses": senses}
@@ -209,17 +188,105 @@ class KoreanLearningPipeline:
             print(f"  [Error] fetch_basic_dict_data failed for '{word}': {e}", flush=True)
             return {"status": "error", "word": word}
 
+
     async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict:
-        """다의어 문맥 분석 및 선택 (비동기 처리)"""
+        """다의어 중 원본 외국어 뜻(문맥)에 가장 부합하는 뜻 선택"""
+        # 💡 핵심 3: 프롬프트를 명확하게 다듬어 LLM이 외국어 원문과 한국어 뜻풀이를 직접 매칭하게 만듭니다.
         prompt = PromptTemplate.from_template(
-            "당신은 한국어 문맥 분석기입니다. 아래 문장에서 '{word}'라는 단어의 의미를 분석하세요.\n"
-            "[문맥]: {context_text}\n"
-            "[후보]\n{candidates}\n"
-            "위 후보 중 알맞은 정의의 번호(index)를 찾으세요. JSON 형식으로 응답하세요.\n"
-            "{{\n  \"reasoning\": \"이유\",\n  \"best_index\": 0\n}}"
+            "당신은 이중언어 번역 및 문맥 분석기입니다. 사용자가 찾고자 하는 단어의 핵심 의미는 다음과 같습니다.\n"
+            "[목표 의미 및 문맥]: {context_text}\n\n"
+            "아래는 한국어 단어 '{word}'의 사전적 뜻풀이 후보들입니다.\n"
+            "[후보]\n{candidates}\n\n"
+            "위 후보 중 [목표 의미]와 가장 정확하게 일치하는 뜻의 번호(index)를 찾으세요.\n"
+            "반드시 아래의 JSON 형식으로만 응답하세요.\n"
+            "{{\n  \"best_index\": 0\n}}"
         )
         candidates_str = "".join([f"{i}. [{s['pos']}] {s['definition']}\n" for i, s in enumerate(senses)])
         chain = prompt | self.llm | self.json_parser
+        
+        try:
+            result = await chain.ainvoke({"word": word, "context_text": context_text, "candidates": candidates_str})
+            best_idx = result.get("best_index", 0)
+            return senses[best_idx] if 0 <= best_idx < len(senses) else senses[0]
+        except Exception as e:
+            print(f"  [Error] select_best_definition failed: {e}", flush=True)
+            return senses[0]
+            
+            cleaned_output = re.sub(r'```json\n?|```', '', llm_raw_output).strip()
+            
+            try:
+                extracted_words = json.loads(cleaned_output)
+            except Exception:
+                extracted_words = re.findall(r'[가-힣]+', cleaned_output)
+                
+            return extracted_words, llm_raw_output
+        except Exception as e:
+            print(f"  [Error] Vocab extraction failed: {e}", flush=True)
+            return [], f"Error: {str(e)}"
+async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
+        """기초사전 API에서 다의어 포함 뜻풀이 수집"""
+        url = "https://krdict.korean.go.kr/api/search"
+        params = {
+            "key": self.dict_api_key, 
+            "q": word, 
+            "part": "word", 
+            "sort": "popular",  # 'dict' 대신 'popular'를 써서 대중적인 뜻
+            "advanced": "y", 
+            "method": "exact",
+            "num": 10           # 다의어가 잘리지 않게 후보군을 10개로
+        }
+        print(f"  [Dict API] '{word}' 기초사전 검색 중...", flush=True)
+        
+        def _sync_request():
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            return response.text
+
+        try:
+            response_text = await asyncio.to_thread(_sync_request)
+            
+            root = ET.fromstring(response_text)
+            total = int(root.findtext('total', '0'))
+            
+            if total > 0:
+                items = root.findall('.//item')[:10]
+                senses = []
+                for item in items:
+                    pos = item.findtext('pos', '품사 없음')
+                    # 한 item 내에 sense가 여러 개 있을 수 있으므로 모두 탐색
+                    for sense in item.findall('sense'):
+                        definition = sense.findtext('definition', '정의 없음')
+                        clean_def = self._clean_text(definition)
+                        
+                        if not any(s['definition'] == clean_def for s in senses):
+                            senses.append({"pos": pos, "definition": clean_def})
+                            
+                print(f"  [Dict API] '{word}' 뜻 {len(senses)}개 발견 완료!", flush=True)
+                return {"status": "success", "word": word, "senses": senses}
+            
+            print(f"  [Dict API] '{word}' 사전에 등록되지 않은 단어입니다.", flush=True)
+            return {"status": "fail", "word": word}
+            
+        except Exception as e:
+            print(f"  [Error] fetch_basic_dict_data failed for '{word}': {e}", flush=True)
+            return {"status": "error", "word": word}
+
+
+    async def select_best_definition(self, word: str, senses: list, context_text: str) -> dict:
+        """다의어 중 원본 외국어 뜻(문맥)에 가장 부합하는 뜻 선택"""
+        # LLM이 외국어 원문과 한국어 뜻풀이를 직접 매칭
+        prompt = PromptTemplate.from_template(
+            "당신은 이중언어 번역 및 문맥 분석기입니다. 사용자가 찾고자 하는 단어의 핵심 의미는 다음과 같습니다.\n"
+            "[목표 의미 및 문맥]: {context_text}\n\n"
+            "아래는 한국어 단어 '{word}'의 사전적 뜻풀이 후보들입니다.\n"
+            "[후보]\n{candidates}\n\n"
+            "위 후보 중 [목표 의미]와 가장 정확하게 일치하는 뜻의 번호(index)를 찾으세요.\n"
+            "반드시 아래의 JSON 형식으로만 응답하세요.\n"
+            "{{\n  \"best_index\": 0\n}}"
+        )
+        candidates_str = "".join([f"{i}. [{s['pos']}] {s['definition']}\n" for i, s in enumerate(senses)])
+        chain = prompt | self.llm | self.json_parser
+        
         try:
             result = await chain.ainvoke({"word": word, "context_text": context_text, "candidates": candidates_str})
             best_idx = result.get("best_index", 0)
