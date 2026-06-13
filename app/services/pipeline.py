@@ -138,14 +138,22 @@ class KoreanLearningPipeline:
         )
         
         chain = prompt | self.llm 
+        
         try:
             response = await chain.ainvoke({"text": text})
             llm_raw_output = response.content.strip() 
+            
+            cleaned_output = re.sub(r'```json\n?|```', '', llm_raw_output).strip()
+            
+            try:
+                extracted_words = json.loads(cleaned_output)
+            except Exception:
+                extracted_words = re.findall(r'[가-힣]+', cleaned_output)
+            return extracted_words, llm_raw_output
+            
         except Exception as e:
             print(f"  [Error] Vocab extraction failed: {e}", flush=True)
-            llm_raw_output = "[]"
-
-        return llm_raw_output
+            return [], f"Error: {str(e)}"
 
     async def fetch_basic_dict_data(self, word: str, expected_meaning: str = None) -> dict:
         """기초사전 API에서 다의어 포함 뜻풀이 수집"""
